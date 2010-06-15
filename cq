@@ -2,13 +2,6 @@
 
 integer queuefd
 
-# Kill our children when we receive a kill-signal.
-abort() {
-    echo 'abort called' >&2
-    #pkill -P $$
-    return $(( 128 + $1 ))
-}
-
 # Utility functions
 die() { echo $@ >&2; exit 1 }
 
@@ -23,47 +16,55 @@ init() {
     exec -- {queuefd}>>$CQDIR/queue
 }
 
+cqdpid() { cat $CQDIR/cqd.pid }
+
 lock() { flock -x $queuefd }
 unlock() { flock -u $queuefd }
 
+notify-cqd() {
+    local pid=$(cqdpid)
+    if [ -n $pid ]; then
+        echo "notifying cqd"
+        kill -USR1 $pid
+    fi
+}
+
+enqueue() {
+    echo $@ >> $CQDIR/queue
+    notify-cqd
+}
+
+newjobid() {
+    # XXX: this really should only be locking the jobs directory, or some other
+    # lockfile, but I can't find a way to flock a directory in shell.
+    lock
+    comm -13 <(ls $CQDIR/jobs | sort -n) \
+             <(for ((i=0; ; ++i)) echo $i) \
+        2>/dev/null | head -1 2>/dev/null
+    unlock
+}
+
 # Commands
-cq-new() {
+cq-nop() {}
+
+cq-create() {
     # Set up a new control directory.
     CQDIR=${1:-${CQDIR:-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
     mkdir -p $CQDIR || die
     echo "export CQDIR='$CQDIR'"
 }
 
-cq-nop() {}
-
 cq-run() {
-    echo $$ > $CQDIR/run.pid
-    #TRAPEXIT() { rm $CQDIR/run.pid }
+    export CQDIR
+    cqd &
+    echo $! > $CQDIR/cqd.pid
+}
 
-    # We need to send inotifywait's output to an actual file rather than pipe it
-    # to a subshell or a fifo because otherwise the fact that the queue blocks
-    # messes it up. I hate synchronous IO.
-    inotifywait -q -e modify -m $CQDIR --exclude modifylog | \
-        grep --line-buffered 'MODIFY queue$' > $CQDIR/modifylog &
-
-    # Wait for stuff to happen and dispatch on it
-    inotail -n 0 -f $CQDIR/modifylog | while true; do
-        while { lock
-                [[ -s $CQDIR/queue ]] }
-        do
-            item=$(head -n 1 $CQDIR/queue)
-            sed -i 1d $CQDIR/queue
-            unlock
-
-            if sh -c $item
-            then echo "executed: $item"
-            else echo "failed to execute: $item" >&2
-            fi
-        done
-
-        unlock
-        read line               # wait for inotail to tell us something changed
-    done
+cq-halt() {
+    pid=$(cqdpid)
+    [ -n $pid ] || die "Could not get pid of cqd daemon"
+    kill $pid || die "Could not kill cqd daemon"
+    rm $CQDIR/cqd.pid
 }
 
 cq-edit-queue() {
@@ -74,24 +75,43 @@ cq-edit-queue() {
 
     if $EDITOR $tmpfile; then
         cp $tmpfile $CQDIR/queue
+        notify-cqd
     else
         echo "editor failed, not modifying queue" >&2
-        xyzzy=1
+        failed=1
     fi
+
+    unlock
 
     echo removing temp file
     rm $tmpfile
 
-    echo here unlocking
-    unlock
-    #flock -u $queuefd
-    echo here unlocked
-
-    echo "xyzzy: ${xyzzy:-0}"
-    return ${xyzzy:-0}
+    return ${failed:-0}
 }
 
-cq-add() {}
+cq-add() {
+    mkdir -p $CQDIR/jobs || die "cannot make job directory"
+    jobid=$(newjobid)
+    jobdir=$CQDIR/jobs/$jobid
+    mkdir $jobdir || die "job already exists: $jobid"
+
+    # XXX: should be locking job directory, not entire queue!
+    lock
+
+    # Create job
+    cat >$jobdir/run <<EOF
+#!/bin/sh
+$@
+EOF
+    (( $? )) && die "failed to create job runfile"
+    chmod +x $jobdir/run || die "cannot make job runfile executable"
+
+    # Add to queue
+    enqueue $jobid
+
+    # Done.
+    unlock
+}
 
 
 # Determine command & global options and run command
@@ -106,12 +126,13 @@ done
 cmd=$1; shift
 
 case $cmd in
-    add|edit|edit-queue|halt|list|new|nop|run)
+    add|create|edit|edit-queue|halt|list|nop|run)
         # command was fully specified, do nothing
         ;;
 
     # Aliases go here.
     a) cmd=add;;
+    c) cmd=create;;
     e) cmd=edit;;
     eq) cmd=edit-queue;;
     h) cmd=halt;;
@@ -121,5 +142,5 @@ case $cmd in
     *) echo "unrecognized command: $cmd"; exit 1;;
 esac
 
-[ $cmd != new ] && init
+[ $cmd != create ] && init
 cq-$cmd $@

@@ -176,6 +176,7 @@ int main(int argc, char **argv) {
     ENSURE(sigaction, SIGUSR1, &sact, NULL);
 
     /* Determine paths. */
+    /* FIXME: error if CQDIR is not valid. */
     cqdir = getenv("CQDIR");
     size_t cqdirlen = strlen(cqdir);
     /* we add 2, 1 for the slash, and 1 for the null terminator. */
