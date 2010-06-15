@@ -70,13 +70,13 @@ cq-hup() {
     notify-cqd
 }
 
-cq-run() {
+cq-start() {
     export CQDIR
     cqd &
     echo $! > $CQDIR/cqd.pid
 }
 
-cq-halt() {
+cq-stop() {
     local pid=$(cqdpid)
     [ -n "$pid" ] && die "Could not get pid of cqd daemon"
     kill $pid || die "Could not kill cqd daemon"
@@ -184,7 +184,7 @@ done
 cmd=$1; shift
 
 case $cmd in
-    add|create|edit|edit-queue|halt|hup|list|nop|run)
+    add|create|edit|edit-queue|hup|list|run|start|stop)
         # command was fully specified, do nothing
         ;;
 
@@ -193,9 +193,7 @@ case $cmd in
     c) cmd=create;;
     e) cmd=edit;;
     eq) cmd=edit-queue;;
-    h) cmd=halt;;
     l) cmd=list;;
-    r) cmd=run;;
 
     *) echo "unrecognized command: $cmd"; exit 1;;
 esac
