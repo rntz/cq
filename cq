@@ -56,6 +56,8 @@ jobdesc() {
     exec {jobfd}>&-
 }
 
+jobdescs() { while read jobid; do jobdesc $jobid; done }
+
 # Commands
 cq-nop() {}
 
@@ -84,15 +86,34 @@ cq-stop() {
 }
 
 cq-list() {
+    local qtmp=$(mktemp)
+    local jtmp=$(mktemp)
+
+    # Lock job directory
     exec {jobdirfd}>$CQDIR/jobs/.lock
     flock -x $jobdirfd
 
-    # TODO: list them in the order they are in the queue file
-    ls $CQDIR/jobs | sort | while read jobid; do
-        jobdesc $jobid
-    done | column -s '\t' -t
+    # Copy the queue file
+    lock
+    cat $CQDIR/queue > $qtmp
+    unlock
+
+    # Determine which jobs aren't in the queue file
+    comm -23 <(ls $CQDIR/jobs | sort -n) <(sort -n $qtmp) > $jtmp
+
+    # TODO: some way of determining what the current job is.
+    {
+        echo 'JOBID\tDESCRIPTION'
+        # Jobs in the queue.
+        cat $qtmp | jobdescs
+        # Jobs not in the queue, if any exist.
+        [ -s $jtmp ] && { echo '--'; cat $jtmp | jobdescs }
+    } | column -s $'\t' -t
 
     flock -u $jobdirfd
+    unlock
+
+    rm $qtmp $jtmp
 }
 
 cq-edit-queue() {
