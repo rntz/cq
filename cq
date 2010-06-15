@@ -1,6 +1,9 @@
 #!/bin/zsh
 
-integer queuefd
+integer lockfd
+
+# Add our directory to the path.
+PATH=$(dirname $(readlink -f $0)):$PATH
 
 # Utility functions
 die() { echo $@ >&2; exit 1 }
@@ -13,35 +16,28 @@ init() {
     [ -w $CQDIR ] || die 'CQDIR not writable'
 
     # Open the queue file
-    exec -- {queuefd}>>$CQDIR/queue
+    exec {lockfd}>$CQDIR/.lock
 }
 
-cqdpid() { cat $CQDIR/cqd.pid }
+cqdpid() { cat $CQDIR/cqd.pid 2>/dev/null }
 
-lock() { flock -x $queuefd }
-unlock() { flock -u $queuefd }
+lock() { flock -x $lockfd }
+unlock() { flock -u $lockfd }
 
 notify-cqd() {
     local pid=$(cqdpid)
-    if [ -n $pid ]; then
-        echo "notifying cqd"
+    if [ -n "$pid" ]; then
+        echo "notifying cqd (pid $pid)"
         kill -USR1 $pid
+    else
+        echo "cqd not running"
     fi
 }
 
-enqueue() {
-    echo $@ >> $CQDIR/queue
-    notify-cqd
-}
-
 newjobid() {
-    # XXX: this really should only be locking the jobs directory, or some other
-    # lockfile, but I can't find a way to flock a directory in shell.
-    lock
-    comm -13 <(ls $CQDIR/jobs | sort -n) \
+    comm -13 <(ls $CQDIR/jobs | egrep '^[0-9]+$' | sort -n) \
              <(for ((i=0; ; ++i)) echo $i) \
         2>/dev/null | head -1 2>/dev/null
-    unlock
 }
 
 # Commands
@@ -54,6 +50,10 @@ cq-create() {
     echo "export CQDIR='$CQDIR'"
 }
 
+cq-hup() {
+    notify-cqd
+}
+
 cq-run() {
     export CQDIR
     cqd &
@@ -61,16 +61,17 @@ cq-run() {
 }
 
 cq-halt() {
-    pid=$(cqdpid)
-    [ -n $pid ] || die "Could not get pid of cqd daemon"
+    local pid=$(cqdpid)
+    [ -n "$pid" ] && die "Could not get pid of cqd daemon"
     kill $pid || die "Could not kill cqd daemon"
     rm $CQDIR/cqd.pid
 }
 
 cq-edit-queue() {
+    tmpfile=$(mktemp)
+
     lock
 
-    tmpfile=$(mktemp)
     cp $CQDIR/queue $tmpfile
 
     if $EDITOR $tmpfile; then
@@ -83,9 +84,7 @@ cq-edit-queue() {
 
     unlock
 
-    echo removing temp file
     rm $tmpfile
-
     return ${failed:-0}
 }
 
@@ -103,12 +102,19 @@ cq-add() {
     done
     set -- ${@[$OPTIND,-1]}
 
+    # Lock the jobs directory
+    exec {joblockfd}>$CQDIR/jobs/.lock
+    flock -x $joblockfd
+
     [ -z $jobid ] && jobid=$(newjobid)
     jobdir=$CQDIR/jobs/$jobid
-    mkdir $jobdir || die "job already exists: $jobid"
+    mkdir $jobdir 2>/dev/null || die "job already exists: $jobid"
 
-    # XXX: should be locking job directory, not entire queue!
-    lock
+    # Unlock jobs directory & lock our job's directory.
+    flock -u $joblockfd
+    exec {joblockfd}>&-
+    exec {joblockfd}>$jobdir/.lock
+    flock -x $joblockfd
 
     # Create job
     runfile=$jobdir/run
@@ -120,19 +126,20 @@ EOF
     chmod +x $runfile || die "cannot make job runfile executable"
 
     # Edit the job if the user requested it.
-    if ! $EDITOR $runfile; then
-        # XXX: should we do cleanup? remove the job? we should at least tell the
-        # user to clean up the job manually if we don't.
-        die "editor failed, not adding job $jobid"
+    if [ -n "$edit" ] && ! $EDITOR $runfile; then
+        echo "editor failed, not adding job $jobid" >&2
+        rm -r $jobdir || echo "could not remove job directory for $jobid" >&2
+        exit 1
     fi
 
-    # XXX: It's only here that I should be locking the queue, after unlocking
-    # the job.
+    # Unlock job's directory.
+    flock -u $joblockfd
+    exec {joblockfd}>&-
 
-    # Add to queue
-    enqueue $jobid
-
-    # Done.
+    # Add to queue.
+    lock
+    echo $jobid >> $CQDIR/queue
+    notify-cqd
     unlock
 }
 
@@ -149,7 +156,7 @@ done
 cmd=$1; shift
 
 case $cmd in
-    add|create|edit|edit-queue|halt|list|nop|run)
+    add|create|edit|edit-queue|halt|hup|list|nop|run)
         # command was fully specified, do nothing
         ;;
 
