@@ -152,18 +152,20 @@ cq-add() {
     set -- ${@[$OPTIND,-1]}
 
     # Lock the jobs directory
-    exec {joblockfd}>$CQDIR/jobs/.lock
-    flock -x $joblockfd
+    exec {jobsfd}>$CQDIR/jobs/.lock
+    flock -x $jobsfd
 
     [ -z $jobid ] && jobid=$(newjobid)
     jobdir=$CQDIR/jobs/$jobid
     mkdir $jobdir 2>/dev/null || die "job already exists: $jobid"
 
-    # Unlock jobs directory & lock our job's directory.
-    flock -u $joblockfd
-    exec {joblockfd}>&-
-    exec {joblockfd}>$jobdir/.lock
-    flock -x $joblockfd
+    # Lock our job's directory, then Unlock the job directory. Do it in this
+    # order so that there's no time when our job is in the job directory, but
+    # its job directory is uninitialized and unlocked.
+    exec {jobdirfd}>$jobdir/.lock
+    flock -x $jobdirfd
+    flock -u $jobsfd
+    exec {jobsfd}>&-
 
     # Create job
     runfile=$jobdir/run
