@@ -90,8 +90,20 @@ cq-edit-queue() {
 }
 
 cq-add() {
+    # Make sure that our job directory exists.
     mkdir -p $CQDIR/jobs || die "cannot make job directory"
-    jobid=$(newjobid)
+
+    # Parse options.
+    while getopts 'en:' option ${@}; do
+        case $option in
+            e) edit=true;;
+            n) jobid=$OPTARG;;
+            *) die "Unrecognized cq-add option: ${option}";;
+        esac
+    done
+    set -- ${@[$OPTIND,-1]}
+
+    [ -z $jobid ] && jobid=$(newjobid)
     jobdir=$CQDIR/jobs/$jobid
     mkdir $jobdir || die "job already exists: $jobid"
 
@@ -99,12 +111,23 @@ cq-add() {
     lock
 
     # Create job
-    cat >$jobdir/run <<EOF
+    runfile=$jobdir/run
+    cat >$runfile <<EOF
 #!/bin/sh
 $@
 EOF
     (( $? )) && die "failed to create job runfile"
-    chmod +x $jobdir/run || die "cannot make job runfile executable"
+    chmod +x $runfile || die "cannot make job runfile executable"
+
+    # Edit the job if the user requested it.
+    if ! $EDITOR $runfile; then
+        # XXX: should we do cleanup? remove the job? we should at least tell the
+        # user to clean up the job manually if we don't.
+        die "editor failed, not adding job $jobid"
+    fi
+
+    # XXX: It's only here that I should be locking the queue, after unlocking
+    # the job.
 
     # Add to queue
     enqueue $jobid
@@ -118,7 +141,7 @@ EOF
 while getopts 'd:' option ${@}; do
     case $option in
         d) CQDIR=$OPTARG;;
-        *) echo "Unrecognized option flag ${option}"; exit 1;;
+        *) die "Unrecognized option: ${option}";;
     esac
     set -- ${@[$OPTIND,-1]}
 done
