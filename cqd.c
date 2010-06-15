@@ -1,4 +1,4 @@
-/* TODO: remove dependence on gnu */
+/* TODO: remove dependence on gnu/linux */
 /* - don't use asprintf */
 /* - don't use getline */
 /* - don't use O_CLOEXEC :( */
