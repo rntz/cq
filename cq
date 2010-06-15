@@ -40,6 +40,22 @@ newjobid() {
         2>/dev/null | head -1 2>/dev/null
 }
 
+jobdesc() {
+    local jobid=$1
+    local jobdir=$CQDIR/jobs/$jobid
+    local jobfd
+    exec {jobfd}>$jobdir/.lock
+    flock -x $jobfd
+
+    local desc="${jobid}\t$(head -n 2 $jobdir/run | tail -n 1)"
+    (( $(wc -l < ${jobdir}/run) > 2)) && desc+='...'
+    echo $desc
+
+    # not sure unlocking is necessary, since we're closing the fd anyway
+    flock -u $jobfd
+    exec {jobfd}>&-
+}
+
 # Commands
 cq-nop() {}
 
@@ -65,6 +81,18 @@ cq-halt() {
     [ -n "$pid" ] && die "Could not get pid of cqd daemon"
     kill $pid || die "Could not kill cqd daemon"
     rm $CQDIR/cqd.pid
+}
+
+cq-list() {
+    exec {jobdirfd}>$CQDIR/jobs/.lock
+    flock -x $jobdirfd
+
+    # TODO: list them in the order they are in the queue file
+    ls $CQDIR/jobs | sort | while read jobid; do
+        jobdesc $jobid
+    done | column -s '\t' -t
+
+    flock -u $jobdirfd
 }
 
 cq-edit-queue() {
