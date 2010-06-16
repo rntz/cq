@@ -179,6 +179,32 @@ EOF
     unlock
 }
 
+cq-remove() {
+    lock
+
+    jobid=$1
+    jobdir=$CQDIR/jobs/$jobid
+    [ -d $jobdir ] || die "No such job: ${jobid}"
+
+    # Remove from queue
+    tmp=$(mktemp)
+    cp $CQDIR/queue $tmp
+    fgrep -x -v $jobid $tmp > $CQDIR/queue
+    notify-cqd
+
+    rm -r $jobdir || {
+        echo "Cannot remove job dir for ${jobid}"
+        echo "Attempting to restore job queue..."
+        if cp $tmp $CQDIR/queue
+        then echo "Job queue restored."
+        else echo 'Could not restore job queue!'
+        fi
+        exit 1
+    } >&2
+
+    unlock
+}
+
 
 # Determine command & global options and run command
 while getopts 'd:' option ${@}; do
@@ -192,7 +218,7 @@ done
 cmd=$1; shift
 
 case $cmd in
-    add|create|destroy|edit|edit-queue|hup|list|start|stop)
+    add|create|destroy|edit|edit-queue|hup|list|remove|start|stop)
         # command was fully specified, do nothing
         ;;
 
@@ -202,6 +228,7 @@ case $cmd in
     e) cmd=edit;;
     eq) cmd=edit-queue;;
     l) cmd=list;;
+    r|rem) cmd=remove;;
 
     *) echo "unrecognized command: $cmd"; exit 1;;
 esac
