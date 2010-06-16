@@ -7,6 +7,9 @@ LIBEXECFILES=cq cqd
 MAN1FILES=cq.1
 MANFILES=$(MAN1FILES)
 
+DISTFILES=Makefile config.mk cq.pod $(LIBEXECFILES)
+DISTFILES+=INSTALL LICENSE NO-WARRANTY
+
 all: $(LIBEXECFILES) $(MANFILES)
 
 install: all
@@ -21,7 +24,13 @@ uninstall:
 	rm -f $(addprefix $(MAN)/man1/,$(MAN1FILES))
 
 clean:
-	rm -f $(MANFILES)
+	rm -f cq.tar.{gz,bz2} $(MANFILES)
+
+cq.tar.bz2: $(DISTFILES)
+	tar cjf $@ $^
+
+cq.tar.gz: $(DISTFILES)
+	tar czf $@ $^
 
 %.1: %.pod
 	pod2man -c '' -r '' -q '`' $< > $@
