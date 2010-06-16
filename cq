@@ -60,6 +60,7 @@ jobdescs() { while read jobid; do jobdesc $jobid; done }
 cq-nop() {}
 
 cq-create() {
+    # FIXME: test whether directory is already occupied
     # Set up a new control directory.
     CQDIR=${1:-${CQDIR:-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
     mkdir -p $CQDIR || die "cannot make control directory"
