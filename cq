@@ -33,6 +33,13 @@ newjobid() {
         2>/dev/null | head -1 2>/dev/null
 }
 
+jobsummary() {
+    local jobdir=$1
+    local desc="$(head -n 2 $jobdir/run | tail -n 1)"
+    (( $(wc -l < ${jobdir}/run) > 2 )) && desc+='...'
+    echo $desc
+}
+
 jobdesc() {
     local jobid=$1
     local jobdir=${2:-$CQDIR/jobs/$jobid}
@@ -40,9 +47,7 @@ jobdesc() {
     exec {jobfd}>$jobdir/lock
     flock -s $jobfd
 
-    local desc="${jobid}\t$(head -n 2 $jobdir/run | tail -n 1)"
-    (( $(wc -l < ${jobdir}/run) > 2)) && desc+='...'
-    echo $desc
+    echo "${jobid}\t$(jobsummary $jobdir)"
 
     # not sure unlocking is necessary, since we're closing the fd anyway
     flock -u $jobfd
@@ -87,6 +92,33 @@ cq-stop() {
     rm $CQDIR/cqd.pid
 }
 
+cq-status() {
+    echo "CQDIR is $CQDIR"
+    lock
+
+    local pid=$(cqdpid)
+    if [ -n "$pid" ]; then
+        if [ -d /proc/$pid ]
+        then echo "cqd is running with pid $pid"
+        else echo "cqd ostensibly has pid $pid, but is not running!"
+        fi
+    else echo "cqd is not running"
+    fi
+
+    [ -d $CQDIR/current ] && echo "current job: $(jobsummary $CQDIR/current)"
+
+    unlock
+}
+
+cq-view()  {
+    # No locking can save the fundamental issue here - the current job can end
+    # at any time. So we don't do any locking.
+
+    [ -f $CQDIR/current/pid ] || die "No current job to view."
+    local pid=$(cat $CQDIR/current/pid)
+    screen -r $pid
+}
+
 cq-list() {
     tmp=$(mktemp)
     lock
@@ -95,7 +127,7 @@ cq-list() {
     comm -23 <(ls $CQDIR/jobs | sort -n) <(sort -n $CQDIR/queue) > $tmp
 
     {
-        echo 'JOBID\tDESCRIPTION'
+        echo 'JOBID\tSUMMARY'
         # Current job.
         [ -d $CQDIR/current ] && jobdesc '*' $CQDIR/current
         # Jobs in the queue.
@@ -218,7 +250,7 @@ done
 cmd=$1; shift
 
 case $cmd in
-    add|create|destroy|edit|edit-queue|hup|list|remove|start|stop)
+    add|create|destroy|edit|edit-queue|hup|list|remove|start|status|stop|view)
         # command was fully specified, do nothing
         ;;
 
@@ -229,6 +261,8 @@ case $cmd in
     eq) cmd=edit-queue;;
     l) cmd=list;;
     r|rem) cmd=remove;;
+    s) cmd=status;;
+    v) cmd=view;;
 
     *) echo "unrecognized command: $cmd"; exit 1;;
 esac
