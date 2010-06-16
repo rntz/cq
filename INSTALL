@@ -1,17 +1,21 @@
-There is no real installation procedure at the moment. Simply put cqd and cq
-somewhere in your PATH.
+Installation
+============
+
+Edit config.mk to taste, then `make install'. By default, we install to
+/usr/local, so you will need to be root to `make install'.
 
 
 Requirements
 ============
 
+- Python >= 2.5
+- zsh (no idea what version)
+- pod2man: used to generate the man page
+
 cq needs zsh to run. This is a known bug. I intend to fix it, but it is not high
 priority. I will accept patches to this end, if they are correct and reasonably
 concise.
 
-cqd (and therefore cq) needs Python to run, at least version 2.5. This is not a
-bug, and I will not fix it.
-
-There are perhaps other trivial requirements I've missed. If you've been bitten
-by the fact that one of them isn't mentioned here, email me or submit a patch
-(either removing the dependency or changing this file).
+There may be other requirements I've missed. If you've been bitten by the fact
+that one of them isn't mentioned here, email me or submit a patch (either
+removing the dependency or changing this file).
