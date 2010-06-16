@@ -230,6 +230,8 @@ void take_job(char *queue_path) {
 }
 
 int main(int argc, char **argv) {
+    (void) argc, (void) argv;
+
     /* Mask out SIGUSR1 and give it a nop action. */
     sigset_t sset_new, sset_old;
     ENSURE(sigemptyset, &sset_new);
@@ -265,7 +267,7 @@ int main(int argc, char **argv) {
             if ((err < 0 && errno == ENOENT) || (!err && !stbuf.st_size))
                 break;
 
-            CHECK(err, lstat);
+            CHECK(lstat, err);
 
             /* Take a job from the queue, make it current, run it. */
             take_job(queue_path);
