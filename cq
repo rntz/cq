@@ -64,6 +64,12 @@ cq-create() {
     echo "export CQDIR='$CQDIR'"
 }
 
+cq-destroy() {
+    [ -f $CQDIR/cqd.pid ] && die 'cqd still running!'
+    rm -r $CQDIR
+    echo "unset CQDIR"
+}
+
 cq-hup() {
     notify-cqd || { echo "cqd not running" >&2; return 1 }
 }
@@ -186,7 +192,7 @@ done
 cmd=$1; shift
 
 case $cmd in
-    add|create|edit|edit-queue|hup|list|run|start|stop)
+    add|create|destroy|edit|edit-queue|hup|list|start|stop)
         # command was fully specified, do nothing
         ;;
 
