@@ -271,11 +271,10 @@ case $cmd in
 
     # Aliases go here.
     a) cmd=add;;
-    c) cmd=create;;
     e) cmd=edit;;
     eq) cmd=edit-queue;;
     l) cmd=list;;
-    r|rem) cmd=remove;;
+    r) cmd=remove;;
     s) cmd=status;;
     v) cmd=view;;
 
