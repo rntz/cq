@@ -60,7 +60,11 @@ char *queue_path;
 
 /* signal handlers */
 void nop_handler(int i) { (void) i; }
-void set_stop_flag_handler(int i) { (void) i; stop_flag = 1; }
+void set_stop_flag_handler(int i) {
+    (void) i;
+    SAY("setting stop flag");
+    stop_flag = 1;
+}
 
 void die(const char *s) {
     perror(s);
@@ -251,11 +255,14 @@ int main(int argc, char **argv) {
     ENSURE(sigaddset, &sset_new, SIGUSR1);
     ENSURE(sigprocmask, SIG_BLOCK, &sset_new, &sset_old);
 
-    struct sigaction sact = { .sa_handler = nop_handler };
+    struct sigaction sact = { .sa_handler = nop_handler,
+                              .sa_flags = 0 };
+    ENSURE(sigemptyset, &sact.sa_mask);
     ENSURE(sigaction, SIGUSR1, &sact, NULL);
 
     /* Give SIGUSR2 an action that sets the stop flag. */
     sact.sa_handler = set_stop_flag_handler;
+    sact.sa_flags = SA_RESTART;
     ENSURE(sigaction, SIGUSR2, &sact, NULL);
 
     /* Determine some paths. */
@@ -281,8 +288,10 @@ int main(int argc, char **argv) {
             int err = lstat(queue_path, &stbuf);
 
             /* If the queue file does not exist or is empty, we wait. */
-            if ((err < 0 && errno == ENOENT) || (!err && !stbuf.st_size))
+            if ((err < 0 && errno == ENOENT) || (!err && !stbuf.st_size)) {
+                unlock(lock_fd);
                 break;
+            }
 
             CHECK(lstat, err);
 
@@ -290,8 +299,9 @@ int main(int argc, char **argv) {
             take_job(queue_path);
             unlock(lock_fd);
             run_job(current_dir);
+
+            if (stop_flag) goto stopped;
         }
-        unlock(lock_fd);
 
         /* Wait to be woken up. */
         SAY("waiting for SIGUSR1");
@@ -300,8 +310,11 @@ int main(int argc, char **argv) {
         SAY("woke up");
     }
 
+    char *pid_path;
+  stopped:
     /* Remove our pid file. */
-    DEFSTRING(pid_path, "%s/%s", cq_dir, CQDPID_PATH);
+    SAY("exiting");
+    ENSURE(asprintf, &pid_path, "%s/%s", cq_dir, CQDPID_PATH);
     ENSURE(unlink, pid_path);
     return 0;
 }
