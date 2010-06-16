@@ -168,11 +168,11 @@ cq-edit() {
     jobid=$1
     [[ -n $jobid ]] || die "No jobid supplied."
     jobdir=$CQDIR/jobs/$jobid
-    flock -x $jobdir/lock -c $EDITOR $jobdir/run
+    flock -x $jobdir/lock $EDITOR $jobdir/run
 }
 
 cq-edit-queue() {
-    flock -x $CQDIR/lock -- $EDITOR $CQDIR/queue
+    flock -x $CQDIR/lock $EDITOR $CQDIR/queue
     notify-cqd
 }
 
