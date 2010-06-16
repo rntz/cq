@@ -30,6 +30,7 @@
 #define JOBS_DIR        "jobs"
 #define LOCK_PATH       "lock"
 #define QUEUE_PATH      "queue"
+#define CQDPID_PATH     "cqd.pid"
 #define READ_BUF_SIZE   512
 
 /* failure modes */
@@ -37,8 +38,8 @@
 #define ORDIE(name, exp) DIE_IF(name, !(exp))
 #define CHECK(name, exp) DIE_IF(name, (exp) < 0)
 #define CHECK_EOF(name, exp) DIE_IF(name, (exp) == EOF)
-#define ENSURE(func, ...) CHECK(#func, func(__VA_ARGS__))
-#define ENSURE_EOF(func, ...) CHECK_EOF(#func, func(__VA_ARGS__))
+#define ENSURE(func, ...) CHECK(func, func(__VA_ARGS__))
+#define ENSURE_EOF(func, ...) CHECK_EOF(func, func(__VA_ARGS__))
 
 /* utility */
 #define DEFSTRING(name, fmt, ...)               \
@@ -50,13 +51,16 @@
 #define SAY(fmt, ...) DEBUG(fmt "\n", ## __VA_ARGS__)
 
 /* globals */
+int stop_flag = 0;
 int lock_fd;
 char *cq_dir;
 char *jobs_dir;
 char *current_dir;
 char *queue_path;
 
-void nop_handler(int i) { (void) i; } /* no-op signal handler */
+/* signal handlers */
+void nop_handler(int i) { (void) i; }
+void set_stop_flag_handler(int i) { (void) i; stop_flag = 1; }
 
 void die(const char *s) {
     perror(s);
@@ -204,10 +208,18 @@ void run_job(char *jobdir) {
         ENSURE(fprintf, stderr, "child %d succeeded\n", pid);
 
     /* Clean up. */
-    ENSURE(unlink, pidfile);  free(pidfile);
-    ENSURE(unlink, runfile);  free(runfile);
-    ENSURE(unlink, lockfile); free(lockfile);
-    ENSURE(rmdir, jobdir);
+    /* XXX: does this need/should this have locking? only reason would be to
+     * avoid conflicts with cq script reading current job. */
+    if (!fork()) {
+        execl("/bin/rm", "rm", "-r", "--", jobdir, NULL);
+        die("execl");
+    }
+
+    ENSURE(wait, &status);
+    if (status) {
+        ENSURE(fprintf, stderr, "could not remove job directory %s\n", jobdir);
+        exit(1);
+    }
 }
 
 
@@ -242,6 +254,10 @@ int main(int argc, char **argv) {
     struct sigaction sact = { .sa_handler = nop_handler };
     ENSURE(sigaction, SIGUSR1, &sact, NULL);
 
+    /* Give SIGUSR2 an action that sets the stop flag. */
+    sact.sa_handler = set_stop_flag_handler;
+    ENSURE(sigaction, SIGUSR2, &sact, NULL);
+
     /* Determine some paths. */
     cq_dir = getenv(CQDIR_ENVAR);
     /* FIXME: error if cq_dir is not valid. */
@@ -256,7 +272,7 @@ int main(int argc, char **argv) {
                         "%s/%s", cq_dir, LOCK_PATH);
 
     /* Event loop. */
-    for (;;) {
+    while (!stop_flag) {
         for (;;) {
             lock(lock_fd);
 
@@ -283,4 +299,9 @@ int main(int argc, char **argv) {
         ORDIE(sigsuspend, errno == EINTR);
         SAY("woke up");
     }
+
+    /* Remove our pid file. */
+    DEFSTRING(pid_path, "%s/%s", cq_dir, CQDPID_PATH);
+    ENSURE(unlink, pid_path);
+    return 0;
 }

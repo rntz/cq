@@ -82,24 +82,38 @@ cq-hup() {
 }
 
 cq-start() {
+    # FIXME: avoid starting cqd more than once
     export CQDIR
     cqd $@ >$CQDIR/log 2>&1 &
     echo $! > $CQDIR/cqd.pid
 }
 
 cq-stop() {
-    # FIXME: stops cqd even if it's in the middle of a job
-    # TODO: ask whether to stop cqd if queue is nonempty
-    # TODO: add option parsing:
-    # -f option to kill even if queue nonempty
-    # --now option to kill even in middle
+    while getopts 'f' option $@; do
+        case $option in
+            f) force=true;;
+            *) die "Unrecognized cq-stop option: ${option}";;
+        esac
+    done
+    set -- ${@[$OPTIND,-1]}
+
     local pid=$(cqdpid)
     [[ -n $pid ]] || die 'cqd is not running!'
-    if [[ -d /proc/$pid ]]
-    then kill $pid || die 'Could not kill cqd.'
+    if [[ -d /proc/$pid ]]; then
+        if [[ -z $force ]]
+        then kill -USR2 $pid || die 'Could not signal cqd.'
+        else
+            kill $pid || die 'Could not kill cqd.'
+            rm -f $CQDIR/cqd.pid
+            [[ -d $CQDIR/current ]] && rm -r $CQDIR/current
+        fi
     else echo 'cqd does not appear to be running, removing cqd.pid'
     fi
-    rm $CQDIR/cqd.pid
+
+    if [[ -f $CQDIR/cqd.pid ]] && [[ -d $CQDIR/current ]]; then
+        echo 'cqd will exit after it finishes its current job.'
+        echo 'To kill it immediately, use `cq stop -f`.'
+    fi
 }
 
 cq-status() {
