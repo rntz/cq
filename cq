@@ -1,6 +1,6 @@
 #!/bin/zsh
-
 integer lockfd
+exedir=$(dirname $(readlink -f $0))
 
 # Utility functions
 die() { echo $@ >&2; exit 1 }
@@ -84,7 +84,7 @@ cq-hup() {
 cq-start() {
     # FIXME: avoid starting cqd more than once
     export CQDIR
-    cqd $@ >$CQDIR/log 2>&1 &
+    $exedir/cqd $@ >$CQDIR/log 2>&1 &
     echo $! > $CQDIR/cqd.pid
 }
 
