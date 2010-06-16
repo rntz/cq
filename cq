@@ -88,18 +88,16 @@ cq-start() {
 }
 
 cq-stop() {
-    # FIXME: more helpful error message if cqd is not running and is not
-    # supposed to be (cqd.pid does not exist)
     # FIXME: stops cqd even if it's in the middle of a job
     # TODO: ask whether to stop cqd if queue is nonempty
     # TODO: add option parsing:
     # -f option to kill even if queue nonempty
     # --now option to kill even in middle
     local pid=$(cqdpid)
-    [[ -n $pid ]] || die "Could not get pid of cqd daemon"
+    [[ -n $pid ]] || die 'cqd is not running!'
     if [[ -d /proc/$pid ]]
-    then kill $pid || die "Could not kill cqd daemon"
-    else echo "cqd daemon does not appear to be running, removing cqd.pid"
+    then kill $pid || die 'Could not kill cqd.'
+    else echo 'cqd does not appear to be running, removing cqd.pid'
     fi
     rm $CQDIR/cqd.pid
 }
