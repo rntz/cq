@@ -71,6 +71,7 @@ cq-create() {
 }
 
 cq-destroy() {
+    CQDIR=${1:-${CQDIR}}
     [ -f $CQDIR/cqd.pid ] && die 'cqd still running!'
     rm -r $CQDIR
     echo "unset CQDIR"
