@@ -107,6 +107,8 @@ FILE *fopen_file(const char *mode, const char *fmt, ...)
 int lock_file(int flags, mode_t mode, const char *fmt, ...)
 { VA_WRAP(int, fmt, lock_file_v, flags, mode, fmt); }
 
+void unlock_file(int fd) { unlock(fd); ENSURE(close, fd); }
+
 void fcopy(FILE *write, FILE *read) {
     char buf[READ_BUF_SIZE];
     char *s;
@@ -210,11 +212,10 @@ void run_job(char *jobdir) {
 
 
 void take_job(char *queue_path) {
-    /* The queue exists and is nonempty. Get a job from it. */
+    /* Get a job from the queue. */
     char *job = readjob(queue_path);
     SAY("got job: %s", job);
 
-    /* Move the job to the current job directory. */
     char *job_dir;
     ENSURE(asprintf, &job_dir, "%s/%s", jobs_dir, job);
 
@@ -225,7 +226,7 @@ void take_job(char *queue_path) {
     /* Move the job's directory. */
     ENSURE(rename, job_dir, current_dir);
 
-    unlock(job_lock_fd);
+    unlock_file(job_lock_fd);
     free(job_dir);
 }
 
