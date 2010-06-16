@@ -57,7 +57,10 @@ cq-nop() {}
 cq-create() {
     # Set up a new control directory.
     CQDIR=${1:-${CQDIR:-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
-    mkdir -p $CQDIR || die
+    mkdir -p $CQDIR || die "cannot make control directory"
+    mkdir -p $CQDIR/jobs || die "cannot make job directory"
+    touch $CQDIR/queue || die "cannot make job queue"
+
     echo "export CQDIR='$CQDIR'"
 }
 
@@ -121,9 +124,6 @@ cq-edit-queue() {
 }
 
 cq-add() {
-    # Make sure that our job directory exists.
-    mkdir -p $CQDIR/jobs || die "cannot make job directory"
-
     # Parse options.
     while getopts 'en:' option ${@}; do
         case $option in
