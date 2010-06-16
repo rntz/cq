@@ -7,10 +7,10 @@ die() { echo $@ >&2; exit 1 }
 
 init() {
     # Determine the control directory.
-    [ -n $CQDIR ] || die 'No CQDIR specified'
-    [ -d $CQDIR ] || die 'CQDIR is not a directory'
-    [ -x $CQDIR ] || die 'CQDIR not searchable'
-    [ -w $CQDIR ] || die 'CQDIR not writable'
+    [[ -n $CQDIR ]] || die 'No CQDIR specified'
+    [[ -d $CQDIR ]] || die 'CQDIR is not a directory'
+    [[ -x $CQDIR ]] || die 'CQDIR not searchable'
+    [[ -w $CQDIR ]] || die 'CQDIR not writable'
 
     # Open the queue file
     exec {lockfd}>$CQDIR/lock
@@ -23,7 +23,7 @@ unlock() { flock -u $lockfd }
 
 notify-cqd() {
     local pid=$(cqdpid)
-    [ -n "$pid" ] && kill -USR1 $pid
+    [[ -n $pid ]] && kill -USR1 $pid
     return
 }
 
@@ -72,7 +72,7 @@ cq-create() {
 
 cq-destroy() {
     CQDIR=${1:-${CQDIR}}
-    [ -f $CQDIR/cqd.pid ] && die 'cqd still running!'
+    [[ -f $CQDIR/cqd.pid ]] && die 'cqd still running!'
     rm -r $CQDIR
     echo "unset CQDIR"
 }
@@ -88,9 +88,19 @@ cq-start() {
 }
 
 cq-stop() {
+    # FIXME: more helpful error message if cqd is not running and is not
+    # supposed to be (cqd.pid does not exist)
+    # FIXME: stops cqd even if it's in the middle of a job
+    # TODO: ask whether to stop cqd if queue is nonempty
+    # TODO: add option parsing:
+    # -f option to kill even if queue nonempty
+    # --now option to kill even in middle
     local pid=$(cqdpid)
-    [ -n "$pid" ] || die "Could not get pid of cqd daemon"
-    kill $pid || die "Could not kill cqd daemon"
+    [[ -n $pid ]] || die "Could not get pid of cqd daemon"
+    if [[ -d /proc/$pid ]]
+    then kill $pid || die "Could not kill cqd daemon"
+    else echo "cqd daemon does not appear to be running, removing cqd.pid"
+    fi
     rm $CQDIR/cqd.pid
 }
 
@@ -99,24 +109,24 @@ cq-status() {
     lock
 
     local pid=$(cqdpid)
-    if [ -n "$pid" ]; then
-        if [ -d /proc/$pid ]
+    if [[ -n $pid ]]; then
+        if [[ -d /proc/$pid ]]
         then echo "cqd is running with pid $pid"
         else echo "cqd ostensibly has pid $pid, but is not running!"
         fi
     else echo "cqd is not running"
     fi
 
-    [ -d $CQDIR/current ] && echo "current job: $(jobsummary $CQDIR/current)"
+    [[ -d $CQDIR/current ]] && echo "current job: $(jobsummary $CQDIR/current)"
 
     unlock
 }
 
-cq-view()  {
+cq-view() {
     # No locking can save the fundamental issue here - the current job can end
     # at any time. So we don't do any locking.
 
-    [ -f $CQDIR/current/pid ] || die "No current job to view."
+    [[ -f $CQDIR/current/pid ]] || die "No current job to view."
     local pid=$(cat $CQDIR/current/pid)
     screen -r $pid
 }
@@ -131,36 +141,27 @@ cq-list() {
     {
         echo 'JOBID\tSUMMARY'
         # Current job.
-        [ -d $CQDIR/current ] && jobdesc '*' $CQDIR/current
+        [[ -d $CQDIR/current ]] && jobdesc '*' $CQDIR/current
         # Jobs in the queue.
         cat $CQDIR/queue | jobdescs
         # Jobs not in the queue, if any exist.
-        [ -s $tmp ] && { echo '--'; jobdescs < $tmp }
+        [[ -s $tmp ]] && { echo '--'; jobdescs < $tmp }
     } | column -s $'\t' -t
 
     unlock
     rm $tmp
 }
 
+cq-edit() {
+    jobid=$1
+    [[ -n $jobid ]] || die "No jobid supplied."
+    jobdir=$CQDIR/jobs/$jobid
+    flock -x $jobdir/lock -c $EDITOR $jobdir/run
+}
+
 cq-edit-queue() {
-    tmpfile=$(mktemp)
-
-    lock
-
-    cp $CQDIR/queue $tmpfile
-
-    if $EDITOR $tmpfile; then
-        cp $tmpfile $CQDIR/queue
-        notify-cqd
-    else
-        echo "editor failed, not modifying queue" >&2
-        failed=1
-    fi
-
-    unlock
-
-    rm $tmpfile
-    return ${failed:-0}
+    flock -x $CQDIR/lock -- $EDITOR $CQDIR/queue
+    notify-cqd
 }
 
 cq-add() {
@@ -177,7 +178,7 @@ cq-add() {
     lock
 
     # Create a directory for our job.
-    [ -z $jobid ] && jobid=$(newjobid)
+    [[ -z $jobid ]] && jobid=$(newjobid)
     jobdir=$CQDIR/jobs/$jobid
     mkdir $jobdir 2>/dev/null || die "job already exists: $jobid"
     # lock handoff to avoid exposing our job directory in an uninitialized state
@@ -195,7 +196,7 @@ EOF
     chmod +x $runfile || die "cannot make job runfile executable"
 
     # Edit the job if the user requested it.
-    if [ -n "$edit" ] && ! $EDITOR $runfile; then
+    if [[ -n $edit ]] && ! $EDITOR $runfile; then
         echo "editor failed, removing job $jobid" >&2
         lock
         rm -r $jobdir || echo "could not remove job $jobid" >&2
@@ -218,7 +219,7 @@ cq-remove() {
 
     jobid=$1
     jobdir=$CQDIR/jobs/$jobid
-    [ -d $jobdir ] || die "No such job: ${jobid}"
+    [[ -d $jobdir ]] || die "No such job: ${jobid}"
 
     # Remove from queue
     tmp=$(mktemp)
@@ -269,6 +270,6 @@ case $cmd in
     *) echo "unrecognized command: $cmd"; exit 1;;
 esac
 
-[ $cmd != create ] && init
+[[ $cmd != create ]] && init
 cq-$cmd $@
 exit $?
