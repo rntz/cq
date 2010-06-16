@@ -1,9 +1,17 @@
-There is no real installation procedure at the moment. Simply `make', then put
-cqd and cq somewhere in your PATH.
+There is no real installation procedure at the moment. Simply put cqd and cq
+somewhere in your PATH.
 
-If you encounter problems running `make', your system probably doesn't support
-some of the convenient but nonstandard features of GNU/Linux cqd uses. This is a
-known bug. I intend to fix it, but it is not high priority. I will consider
-accepting patches to this end.
 
-cq needs zsh to run. This is another known bug.
+Requirements
+============
+
+cq needs zsh to run. This is a known bug. I intend to fix it, but it is not high
+priority. I will accept patches to this end, if they are correct and reasonably
+concise.
+
+cqd (and therefore cq) needs Python to run, at least version 2.5. This is not a
+bug, and I will not fix it.
+
+There are perhaps other trivial requirements I've missed. If you've been bitten
+by the fact that one of them isn't mentioned here, email me or submit a patch
+(either removing the dependency or changing this file).
