@@ -262,6 +262,7 @@ while getopts 'd:' option ${@}; do
     set -- ${@[$OPTIND,-1]}
 done
 
+(( $# )) || die 'No command supplied!'
 cmd=$1; shift
 
 case $cmd in
