@@ -11,10 +11,36 @@ B<cq> [B<-d> F<DIR>] I<COMMAND> [I<ARGS>]
 
 =head1 DESCRIPTION
 
-cq is a simple command-queueing daemon and frontend. It executes a series of
+cq is a simple command-queueing daemon and frontend. It runs a series of
 commands (jobs) in order in the background. It allows safe interactive editing
 and viewing of the job queue and editing of jobs without unnecessarily
 interrupting job execution.
+
+=head2 Overview
+
+cq is split into two parts: the B<cq> script, documented here, and B<cqd>, the
+command queue daemon. The user never has to deal with cqd directly; the cq
+fronted handles all interaction.
+
+cq operates within an B<instance>. An instance is identified by its control
+directory, usually referred to as I<CQDIR>, where its state is kept. There can
+be at most one copy of cqd running per instance.
+
+When running, cqd executes a series of B<jobs>. Each job is an executable file,
+usually a shell script, provided by the user. Jobs are placed on a B<queue> and
+executed in FIFO order. cqd takes a job off the top of the queue, makes it the
+B<current> job, executes it, destroys it, and repeats. If the queue is empty,
+cqd waits until a new job appears.
+
+cqd executes jobs using screen(1), allowing the user to interact with and view
+its output. (At present, this use of screen is hardcoded; in the future, this
+may be generalized to allow arbitrary wrappers.)
+
+The queue may be edited on-the-fly by the user. While the queue is being edited,
+cqd will not remove jobs from it; it will wait until the user is done editing,
+then remove and run the next job. Similarly, jobs still on the queue may be
+edited by the user. If a job that would be made current is being edited, cqd
+will wait until the user finishes before running it.
 
 
 =head1 OPTIONS
