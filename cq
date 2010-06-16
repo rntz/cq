@@ -2,9 +2,6 @@
 
 integer lockfd
 
-# Add our directory to the path.
-PATH=$(dirname $(readlink -f $0)):$PATH
-
 # Utility functions
 die() { echo $@ >&2; exit 1 }
 
@@ -16,7 +13,7 @@ init() {
     [ -w $CQDIR ] || die 'CQDIR not writable'
 
     # Open the queue file
-    exec {lockfd}>$CQDIR/.lock
+    exec {lockfd}>$CQDIR/lock
 }
 
 cqdpid() { cat $CQDIR/cqd.pid 2>/dev/null }
@@ -26,12 +23,8 @@ unlock() { flock -u $lockfd }
 
 notify-cqd() {
     local pid=$(cqdpid)
-    if [ -n "$pid" ]; then
-        echo "notifying cqd (pid $pid)"
-        kill -USR1 $pid
-    else
-        echo "cqd not running"
-    fi
+    [ -n "$pid" ] && kill -USR1 $pid
+    return
 }
 
 newjobid() {
@@ -42,10 +35,10 @@ newjobid() {
 
 jobdesc() {
     local jobid=$1
-    local jobdir=$CQDIR/jobs/$jobid
+    local jobdir=${2:-$CQDIR/jobs/$jobid}
     local jobfd
-    exec {jobfd}>$jobdir/.lock
-    flock -x $jobfd
+    exec {jobfd}>$jobdir/lock
+    flock -s $jobfd
 
     local desc="${jobid}\t$(head -n 2 $jobdir/run | tail -n 1)"
     (( $(wc -l < ${jobdir}/run) > 2)) && desc+='...'
@@ -69,51 +62,41 @@ cq-create() {
 }
 
 cq-hup() {
-    notify-cqd
+    notify-cqd || { echo "cqd not running" >&2; return 1 }
 }
 
 cq-start() {
     export CQDIR
-    cqd &
+    cqd $@ >$CQDIR/log 2>&1 &
     echo $! > $CQDIR/cqd.pid
 }
 
 cq-stop() {
     local pid=$(cqdpid)
-    [ -n "$pid" ] && die "Could not get pid of cqd daemon"
+    [ -n "$pid" ] || die "Could not get pid of cqd daemon"
     kill $pid || die "Could not kill cqd daemon"
     rm $CQDIR/cqd.pid
 }
 
 cq-list() {
-    local qtmp=$(mktemp)
-    local jtmp=$(mktemp)
-
-    # Lock job directory
-    exec {jobdirfd}>$CQDIR/jobs/.lock
-    flock -x $jobdirfd
-
-    # Copy the queue file
+    tmp=$(mktemp)
     lock
-    cat $CQDIR/queue > $qtmp
-    unlock
 
     # Determine which jobs aren't in the queue file
-    comm -23 <(ls $CQDIR/jobs | sort -n) <(sort -n $qtmp) > $jtmp
+    comm -23 <(ls $CQDIR/jobs | sort -n) <(sort -n $CQDIR/queue) > $tmp
 
-    # TODO: some way of determining what the current job is.
     {
         echo 'JOBID\tDESCRIPTION'
+        # Current job.
+        [ -d $CQDIR/current ] && jobdesc '*' $CQDIR/current
         # Jobs in the queue.
-        cat $qtmp | jobdescs
+        cat $CQDIR/queue | jobdescs
         # Jobs not in the queue, if any exist.
-        [ -s $jtmp ] && { echo '--'; cat $jtmp | jobdescs }
+        [ -s $tmp ] && { echo '--'; jobdescs < $tmp }
     } | column -s $'\t' -t
 
-    flock -u $jobdirfd
     unlock
-
-    rm $qtmp $jtmp
+    rm $tmp
 }
 
 cq-edit-queue() {
@@ -151,23 +134,18 @@ cq-add() {
     done
     set -- ${@[$OPTIND,-1]}
 
-    # Lock the jobs directory
-    exec {jobsfd}>$CQDIR/jobs/.lock
-    flock -x $jobsfd
+    lock
 
+    # Create a directory for our job.
     [ -z $jobid ] && jobid=$(newjobid)
     jobdir=$CQDIR/jobs/$jobid
     mkdir $jobdir 2>/dev/null || die "job already exists: $jobid"
+    # lock handoff to avoid exposing our job directory in an uninitialized state
+    exec {jobfd}>$jobdir/lock
+    flock -x $jobfd
+    unlock
 
-    # Lock our job's directory, then Unlock the job directory. Do it in this
-    # order so that there's no time when our job is in the job directory, but
-    # its job directory is uninitialized and unlocked.
-    exec {jobdirfd}>$jobdir/.lock
-    flock -x $jobdirfd
-    flock -u $jobsfd
-    exec {jobsfd}>&-
-
-    # Create job
+    # Initialize our job's directory.
     runfile=$jobdir/run
     cat >$runfile <<EOF
 #!/bin/sh
@@ -178,14 +156,15 @@ EOF
 
     # Edit the job if the user requested it.
     if [ -n "$edit" ] && ! $EDITOR $runfile; then
-        echo "editor failed, not adding job $jobid" >&2
-        rm -r $jobdir || echo "could not remove job directory for $jobid" >&2
+        echo "editor failed, removing job $jobid" >&2
+        lock
+        rm -r $jobdir || echo "could not remove job $jobid" >&2
         exit 1
     fi
 
     # Unlock job's directory.
-    flock -u $joblockfd
-    exec {joblockfd}>&-
+    flock -u $jobfd
+    exec {jobfd}>&-
 
     # Add to queue.
     lock
@@ -223,3 +202,4 @@ esac
 
 [ $cmd != create ] && init
 cq-$cmd $@
+exit $?

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 /* posix */
 #include <fcntl.h>
@@ -24,9 +25,11 @@
 #include <sys/file.h>           /* flock */
 
 /* constants */
-#define QUEUE_FILENAME  "queue"
-#define LOCK_FILENAME   "lock"
-#define JOBS_DIRNAME    "jobs"
+#define CQDIR_ENVAR     "CQDIR"
+#define CURRENT_DIR     "current"
+#define JOBS_DIR        "jobs"
+#define LOCK_PATH       "lock"
+#define QUEUE_PATH      "queue"
 #define READ_BUF_SIZE   512
 
 /* failure modes */
@@ -37,13 +40,23 @@
 #define ENSURE(func, ...) CHECK(#func, func(__VA_ARGS__))
 #define ENSURE_EOF(func, ...) CHECK_EOF(#func, func(__VA_ARGS__))
 
+/* utility */
+#define DEFSTRING(name, fmt, ...)               \
+    char *name;                                 \
+    ENSURE(asprintf, &name, fmt, __VA_ARGS__)
+
 /* debugging */
 #define DEBUG(fmt, ...) (fprintf(stderr, fmt, ## __VA_ARGS__))
 #define SAY(fmt, ...) DEBUG(fmt "\n", ## __VA_ARGS__)
 
 /* globals */
 int lock_fd;
-char *cqdir;
+char *cq_dir;
+char *jobs_dir;
+char *current_dir;
+char *queue_path;
+
+void nop_handler(int i) { (void) i; } /* no-op signal handler */
 
 void die(const char *s) {
     perror(s);
@@ -52,6 +65,47 @@ void die(const char *s) {
 
 void lock(int fd) { ENSURE(flock, fd, LOCK_EX);  }
 void unlock(int fd) { ENSURE(flock, fd, LOCK_UN); }
+
+int open_file_v(int flags, mode_t mode, const char *fmt, va_list ap) {
+    char *path;
+    ENSURE(vasprintf, &path, fmt, ap);
+    int fd = open(path, flags, mode);
+    CHECK(open, fd);
+    free(path);
+    return fd;
+}
+
+FILE *fopen_file_v(const char *mode, const char *fmt, va_list ap) {
+    char *path;
+    ENSURE(vasprintf, &path, fmt, ap);
+    FILE *file = fopen(path, mode);
+    ORDIE(fopen, file);
+    free(path);
+    return file;
+}
+
+int lock_file_v(int flags, mode_t mode, const char *fmt, va_list ap) {
+    int fd = open_file_v(flags, mode, fmt, ap);
+    lock(fd);
+    return fd;
+}
+
+#define VA_WRAP(restype, argn, func, ...) do {          \
+        va_list __ap;                                   \
+        va_start(__ap, argn);                           \
+        restype __result = func(__VA_ARGS__, __ap);     \
+        va_end(__ap);                                   \
+        return __result;                                \
+    } while (0)
+
+int open_file(int flags, mode_t mode, const char *fmt, ...)
+{ VA_WRAP(int, fmt, open_file_v, flags, mode, fmt); }
+
+FILE *fopen_file(const char *mode, const char *fmt, ...)
+{ VA_WRAP(FILE*, fmt, fopen_file_v, mode, fmt); }
+
+int lock_file(int flags, mode_t mode, const char *fmt, ...)
+{ VA_WRAP(int, fmt, lock_file_v, flags, mode, fmt); }
 
 void fcopy(FILE *write, FILE *read) {
     char buf[READ_BUF_SIZE];
@@ -74,7 +128,7 @@ void fcopy(FILE *write, FILE *read) {
     ENSURE(ftruncate, fileno(write), off);
 }
 
-char *getjob(char *path) {
+char *readjob(char *path) {
     FILE *readf = fopen(path, "r");
     ORDIE(fopen, readf);
 
@@ -97,12 +151,10 @@ char *getjob(char *path) {
     return line;
 }
 
-void child_runjob(char *jobdir, char *job) {
-    char *runfile;
-    ENSURE(asprintf, &runfile, "%s/run", jobdir);
-
-    char *screenname;
-    ENSURE(asprintf, &screenname, "cq.%s", job);
+
+/* Actually running the job. */
+void child_runjob(char *runfile) {
+    char *screenname = "cq";
 
     SAY("running: %s", runfile);
 
@@ -122,48 +174,60 @@ void child_runjob(char *jobdir, char *job) {
     die("execlp");
 }
 
-void runjob(char *job) {
-    char *jobdir;
-    ENSURE(asprintf, &jobdir, "%s/%s/%s", cqdir, JOBS_DIRNAME, job);
+void run_job(char *jobdir) {
+    DEFSTRING(runfile, "%s/run", jobdir);
+    DEFSTRING(pidfile, "%s/pid", jobdir);
+    DEFSTRING(lockfile, "%s/%s", jobdir, LOCK_PATH);
 
-    /* Acquire a lock on the job. */
-    int jobdirfd = open(jobdir, O_CLOEXEC);
-    CHECK(open, jobdirfd);
-    lock(jobdirfd);
-
+    /* Fork off the job process. */
     pid_t pid = fork();
-    if (!pid) child_runjob(jobdir, job); /* We are the child. */
+    if (!pid) child_runjob(runfile); /* We are the child. */
 
     /* Write the pid to the pidfile. */
-    char *pidfilename;
-    ENSURE(asprintf, &pidfilename, "%s/pid", jobdir);
-
-    FILE *pidf = fopen(pidfilename, "w");
+    FILE *pidf = fopen(pidfile, "w");
     ORDIE(fopen, pidf);
-    free(pidfilename);
-
     ENSURE(fprintf, pidf, "%d\n", pid);
-    ENSURE_EOF(fflush, pidf);
     ENSURE_EOF(fclose, pidf);
 
     /* Wait for our child to die. */
     int status = -1;
-    SAY("waiting for child %d, job %s", pid, job);
+    SAY("waiting for child %d", pid);
     ENSURE(wait, &status);
 
     /* Log result. */
     if (status)
-        ENSURE(fprintf, stderr, "job %s failed with status %d\n",
-               job, status);
+        ENSURE(fprintf, stderr, "child %d failed with status %d\n",
+               pid, status);
     else
-        ENSURE(fprintf, stderr, "job %s succeeded\n", job);
+        ENSURE(fprintf, stderr, "child %d succeeded\n", pid);
 
-    /* TODO: cleanup the job (remove job file & directory). */
-    unlock(jobdirfd);
-    ENSURE(close, jobdirfd);
+    /* Clean up. */
+    ENSURE(unlink, pidfile);  free(pidfile);
+    ENSURE(unlink, runfile);  free(runfile);
+    ENSURE(unlink, lockfile); free(lockfile);
+    ENSURE(rmdir, jobdir);
 }
 
-void nop_handler(int i) { (void) i; }
+
+void take_job(char *queue_path) {
+    /* The queue exists and is nonempty. Get a job from it. */
+    char *job = readjob(queue_path);
+    SAY("got job: %s", job);
+
+    /* Move the job to the current job directory. */
+    char *job_dir;
+    ENSURE(asprintf, &job_dir, "%s/%s", jobs_dir, job);
+
+    /* Lock the job. */
+    int job_lock_fd = lock_file(O_CLOEXEC, 0,
+                                "%s/%s", job_dir, LOCK_PATH);
+
+    /* Move the job's directory. */
+    ENSURE(rename, job_dir, current_dir);
+
+    unlock(job_lock_fd);
+    free(job_dir);
+}
 
 int main(int argc, char **argv) {
     /* Mask out SIGUSR1 and give it a nop action. */
@@ -175,20 +239,18 @@ int main(int argc, char **argv) {
     struct sigaction sact = { .sa_handler = nop_handler };
     ENSURE(sigaction, SIGUSR1, &sact, NULL);
 
-    /* Determine paths. */
-    /* FIXME: error if CQDIR is not valid. */
-    cqdir = getenv("CQDIR");
-    size_t cqdirlen = strlen(cqdir);
-    /* we add 2, 1 for the slash, and 1 for the null terminator. */
-    char *queue_path = alloca(cqdirlen + strlen(QUEUE_FILENAME) + 2);
-    char *lock_path = alloca(cqdirlen + strlen(LOCK_FILENAME) + 2);
-    sprintf(queue_path, "%s/%s", cqdir, QUEUE_FILENAME);
-    sprintf(lock_path, "%s/%s", cqdir, LOCK_FILENAME);
+    /* Determine some paths. */
+    cq_dir = getenv(CQDIR_ENVAR);
+    /* FIXME: error if cq_dir is not valid. */
 
-    /* Open lock file. */
-    lock_fd = open(lock_path, O_CREAT | O_CLOEXEC,
-                   S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
-    CHECK(lock_fd, open);
+    ENSURE(asprintf, &queue_path, "%s/%s", cq_dir, QUEUE_PATH);
+    ENSURE(asprintf, &jobs_dir, "%s/%s", cq_dir, JOBS_DIR);
+    ENSURE(asprintf, &current_dir, "%s/%s", cq_dir, CURRENT_DIR);
+
+    /* Lock the lock file. */
+    lock_fd = lock_file(O_CREAT | O_CLOEXEC,
+                        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH,
+                        "%s/%s", cq_dir, LOCK_PATH);
 
     /* Event loop. */
     for (;;) {
@@ -199,21 +261,16 @@ int main(int argc, char **argv) {
             struct stat stbuf;
             int err = lstat(queue_path, &stbuf);
 
-            /* If the file does not exist or is empty, we wait. */
+            /* If the queue file does not exist or is empty, we wait. */
             if ((err < 0 && errno == ENOENT) || (!err && !stbuf.st_size))
                 break;
 
             CHECK(err, lstat);
 
-            /* The queue exists and is nonempty. Get a job from it. */
-            char *line = getjob(queue_path);
-            SAY("got job: %s", line);
-
-            /* Unlock and execute that job. */
+            /* Take a job from the queue, make it current, run it. */
+            take_job(queue_path);
             unlock(lock_fd);
-            SAY("running job: %s", line);
-            runjob(line);
-            free(line);
+            run_job(current_dir);
         }
         unlock(lock_fd);
 
