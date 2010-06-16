@@ -1,1 +1,120 @@
-cq.pod
+=pod
+
+=head1 NAME
+
+cq - command queue
+
+=head1 SYNOPSIS
+
+B<cq> [B<-d> F<DIR>] I<COMMAND> [I<ARGS>]
+
+
+=head1 DESCRIPTION
+
+cq is a simple command-queueing daemon and frontend. It executes a series of
+commands (jobs) in order in the background. It allows safe interactive editing
+and viewing of the job queue and editing of jobs without unnecessarily
+interrupting job execution.
+
+
+=head1 OPTIONS
+
+=over
+
+=item B<-d> F<DIR>
+
+Use F<DIR> as the control directory. Defaults to the value of the environment
+variable I<CQDIR>.
+
+=back
+
+
+=head1 CQ COMMANDS
+
+=over
+
+
+=item B<cq create> [F<CQDIR>]
+
+Creates a new cq instance in F<CQDIR>, or to a temporary directory if I<CQDIR>
+is not supplied (either via environment variable or via B<-d>). Outputs sh(1)
+commands to set the appropriate environment variables, so that future cq
+invocations will use this cq instance; intended to be used with eval(1), as in
+C<eval $(cq create)>.
+
+
+=item B<cq destroy> [F<CQDIR>]
+
+Destroys the cq instance in F<CQDIR>.
+
+
+=item B<cq start>
+
+Starts the cq daemon, cqd, which runs jobs in the job queue.
+
+
+=item B<cq stop> [B<-f>]
+
+Stops the cq daemon, and hence stops the execution of jobs from the queue. If
+there is a job running, the daemon will complete it before exiting. To stop
+immediately, terminating the current job, pass the B<-f> flag.
+
+
+=item B<cq> B<a>[B<dd>] [B<-e>] [B<-n> I<JOBID>] [I<COMMAND> [I<ARG>]...]
+
+Adds a new job to the end of the queue. The job is named I<JOBID>, which
+defaults to the lowest natural number not in use. The job will by default be a
+shell script which runs C<COMMAND ARG...>. If the B<-e> flag is supplied, the
+user is given a chance to edit the job before it is enqueued.
+
+
+=item B<cq> B<r>[B<emove>] I<JOBID>
+
+Removes I<JOBID> from the job queue.
+
+
+=item B<cq> B<e>[B<dit>] I<JOBID>
+
+Opens the job specified by I<JOBID> for editing.
+
+
+=item B<cq eq>
+
+=item B<cq edit-queue>
+
+Opens the job queue for editing.
+
+
+=item B<cq> B<s>[B<tatus>]
+
+Shows the current value of I<CQDIR>, whether the cq daemon is running and its
+pid if it is, and the current job if it exists.
+
+
+=item B<cq> B<l>[B<ist>]
+
+Lists the jobs in the queue (and those not in the queue if such exist, though
+they really shouldn't, except during atomic queue modifications).
+
+
+=item B<cq> B<v>[B<iew>]
+
+Attaches to the screen of the currently-running job.
+
+
+=back
+
+
+=head1 BUGS
+
+At the moment, cq is B<very> incomplete. It also has some overly-specific
+requirements (in particular the Z shell, zsh(1)). Feel free to send patches. I
+make no promises regarding when these bugs will be fixed or with regards to
+timeliness of response to patch submissions.
+
+
+=head1 AUTHOR
+
+Michael Arntzenius <daekharel@gmail.com>
+
+=cut
