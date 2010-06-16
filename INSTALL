@@ -1,0 +1,9 @@
+There is no real installation procedure at the moment. Simply `make', then put
+cqd and cq somewhere in your PATH.
+
+If you encounter problems running `make', your system probably doesn't support
+some of the convenient but nonstandard features of GNU/Linux cqd uses. This is a
+known bug. I intend to fix it, but it is not high priority. I will consider
+accepting patches to this end.
+
+cq needs zsh to run. This is another known bug.
