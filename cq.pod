@@ -105,6 +105,23 @@ Attaches to the screen of the currently-running job.
 =back
 
 
+=head1 ENVIRONMENT VARIABLES
+
+=over
+
+=item I<CQDIR>
+
+The default control directory. This is where cq stores job files, the job queue,
+lock files, and the other state it maintains.
+
+=item I<EDITOR>
+
+The user's editor, invoked when editing of a job or of the job queue etc. is
+requested.
+
+=back
+
+
 =head1 BUGS
 
 At the moment, cq is B<very> incomplete. It also has some overly-specific
