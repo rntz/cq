@@ -1,0 +1,76 @@
+#compdef cq
+_cq() {
+    typeset -a cq_options cq_cmds
+
+    cq_options=(
+        '-d+:instance directory:_files -/'
+    )
+
+    cq_cmds=(
+        'create:Create a new instance'
+        'destroy:Destroy the current instance'
+        'start:Start the cq daemon'
+        'stop:Stop the cq daemon'
+        'add:Add a job to the queue'
+        'remove:Remove a job from the queue'
+        'edit:Edit a job'
+        'edit-queue:Edit the job queue'
+        'list:List jobs'
+        'status:Show instance status'
+        "view:View the current command's screen"
+    )
+
+    typeset -A opt_args
+    local context state line
+    local curcontext=$curcontext
+
+    _arguments -s -S : \
+        $cq_options \
+        ':cq command: _describe "cq command" cq_cmds' \
+        '*::subcommand:->subcommand' \
+        && return 0
+
+    local cmd=${words[1]}
+    local CQDIR=${opt_args[-d]:-${CQDIR}}
+
+    # Un-abbreviate cmd.
+    # FIXME: duplicates code from `cq'
+    case $cmd in
+        a) cmd=add;;
+        e) cmd=edit;;
+        eq) cmd=edit-queue;;
+        l) cmd=list;;
+        r|rem) cmd=remove;;
+        s) cmd=status;;
+        v) cmd=view;;
+    esac
+
+    curcontext=${curcontext%:*:*}:cq-$cmd
+    (( $+functions[_cq_cmd_$cmd] )) && _cq_cmd_$cmd && return 0
+    return 1
+}
+
+# Subcommand completion
+_cq_cmd_add() {
+    _arguments -s -S : \
+        '-e[edit job before enqueueing]' \
+        '-n+:jobid to use:' \
+        '*:::command:_normal'
+    return
+}
+
+_cq_cmd_edit() { _arguments -s -S : ':job: _cq_job' }
+_cq_cmd_remove() { _arguments -s -S : ':job: _cq_job' }
+
+# Helper functions
+_cq_job() {
+    local -a jobs
+    _cq_getjobids jobs
+    _describe -t cq-jobs 'job' jobs
+}
+
+_cq_getjobids() {
+    [ -d $CQDIR/jobs ] && eval "$1=( $CQDIR/jobs/*(:t) )"
+}
+
+_cq $@
