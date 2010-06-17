@@ -22,7 +22,7 @@ cq is split into two parts: the B<cq> script, documented here, and B<cqd>, the
 command queue daemon. The user never has to deal with cqd directly; the cq
 fronted handles all interaction.
 
-cq operates within an B<instance>. An instance is identified by its control
+cq operates within an B<instance>. An instance is identified by its instance
 directory, usually referred to as I<CQDIR>, where its state is kept. There can
 be at most one copy of cqd running per instance.
 
@@ -49,7 +49,7 @@ will wait until the user finishes before running it.
 
 =item B<-d> F<DIR>
 
-Use F<DIR> as the control directory. Defaults to the value of the environment
+Use F<DIR> as the instance directory. Defaults to the value of the environment
 variable I<CQDIR>.
 
 =back
@@ -62,7 +62,7 @@ variable I<CQDIR>.
 
 =item B<cq create> [F<CQDIR>]
 
-Creates a new cq instance in F<CQDIR>, or to a temporary directory if I<CQDIR>
+Creates a new cq instance in F<CQDIR>, or in a temporary directory if I<CQDIR>
 is not supplied (either via environment variable or via B<-d>). Outputs sh(1)
 commands to set the appropriate environment variables, so that future cq
 invocations will use this cq instance; intended to be used with eval(1), as in
@@ -89,9 +89,9 @@ immediately, terminating the current job, pass the B<-f> flag.
 =item B<cq> B<a>[B<dd>] [B<-e>] [B<-n> I<JOBID>] [I<COMMAND> [I<ARG>]...]
 
 Adds a new job to the end of the queue. The job is named I<JOBID>, which
-defaults to the lowest natural number not in use. The job will by default be a
-shell script which runs C<COMMAND ARG...>. If the B<-e> flag is supplied, the
-user is given a chance to edit the job before it is enqueued.
+defaults to the least unused natural number. The job will by default be a shell
+script which runs C<COMMAND ARG...>. If the B<-e> flag is supplied, the user is
+given a chance to edit the job before it is enqueued.
 
 
 =item B<cq> B<r>[B<emove>] I<JOBID>
@@ -113,8 +113,8 @@ Opens the job queue for editing.
 
 =item B<cq> B<s>[B<tatus>]
 
-Shows the current value of I<CQDIR>, whether the cq daemon is running and its
-pid if it is, and the current job if it exists.
+Shows the current value of I<CQDIR>, whether cqd is running and its pid if it
+is, and the current job if it exists.
 
 
 =item B<cq> B<l>[B<ist>]
@@ -137,8 +137,8 @@ Attaches to the screen of the currently-running job.
 
 =item I<CQDIR>
 
-The default control directory. This is where cq stores job files, the job queue,
-lock files, and the other state it maintains.
+The default instance directory. This is where cq stores job files, the job
+queue, lock files, and the other state it maintains.
 
 =item I<EDITOR>
 

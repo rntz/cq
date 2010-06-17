@@ -6,7 +6,7 @@ exedir=$(dirname $(readlink -f $0))
 die() { echo $@ >&2; exit 1 }
 
 init() {
-    # Determine the control directory.
+    # Determine the instance directory.
     [[ -n $CQDIR ]] || die 'No CQDIR specified'
     [[ -d $CQDIR ]] || die 'CQDIR is not a directory'
     [[ -x $CQDIR ]] || die 'CQDIR not searchable'
@@ -61,9 +61,9 @@ cq-nop() {}
 
 cq-create() {
     # FIXME: test whether directory is already occupied
-    # Set up a new control directory.
+    # Set up a new instance directory.
     CQDIR=${1:-${CQDIR:-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
-    mkdir -p $CQDIR || die "cannot make control directory"
+    mkdir -p $CQDIR || die "cannot make instance directory"
     mkdir -p $CQDIR/jobs || die "cannot make job directory"
     touch $CQDIR/queue || die "cannot make job queue"
 
