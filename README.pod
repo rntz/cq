@@ -33,7 +33,7 @@ B<current> job, executes it, destroys it, and repeats. If the queue is empty,
 cqd waits until a new job appears.
 
 cqd executes jobs using screen(1), allowing the user to interact with and view
-its output. (At present, this use of screen is hardcoded; in the future, this
+their output. (At present, this use of screen is hardcoded; in the future, this
 may be generalized to allow arbitrary wrappers.)
 
 The queue may be edited on-the-fly by the user. While the queue is being edited,
