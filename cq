@@ -4,6 +4,7 @@ exedir=$(dirname $(readlink -f $0))
 
 # Utility functions
 die() { echo $@ >&2; exit 1 }
+warn() { echo warning: $@ >&2; return 1 }
 
 init() {
     # Determine the instance directory.
@@ -16,15 +17,16 @@ init() {
     exec {lockfd}>$CQDIR/lock
 }
 
-cqdpid() { cat $CQDIR/cqd.pid 2>/dev/null }
+cqd-running() {
+    cqdpid=$(cat $CQDIR/cqd.pid 2>/dev/null) && \
+        {[[ -n $cqdpid ]] || warn 'cqd.pid exists but is empty'}
+}
 
 lock() { flock -x $lockfd }
 unlock() { flock -u $lockfd }
 
 notify-cqd() {
-    local pid=$(cqdpid)
-    [[ -n $pid ]] && kill -USR1 $pid
-    return
+    cqd-running && kill -USR1 $cqdpid
 }
 
 newjobid() {
@@ -100,22 +102,24 @@ cq-stop() {
     done
     set -- ${@[$OPTIND,-1]}
 
-    local pid=$(cqdpid)
-    [[ -n $pid ]] || die 'cqd is not running!'
-    if [[ -d /proc/$pid ]]; then
-        if [[ -z $force ]]
-        then kill -USR2 $pid || die 'Could not signal cqd.'
-        else
-            kill $pid || die 'Could not kill cqd.'
-            rm -f $CQDIR/cqd.pid
-            [[ -d $CQDIR/current ]] && rm -r $CQDIR/current
-        fi
-    else echo 'cqd does not appear to be running, removing cqd.pid'
-    fi
+    cqd-running || die 'cqd is not running'
 
-    if [[ -f $CQDIR/cqd.pid ]] && [[ -d $CQDIR/current ]]; then
-        echo 'cqd will exit after it finishes its current job.'
-        echo 'To kill it immediately, use `cq stop -f`.'
+    if [[ -d /proc/$cqdpid ]]; then
+        if ${force-false}
+        then
+            kill $cqdpid || die 'could not kill cqd'
+            rm -f $CQDIR/cqd.pid
+            if [[ -d $CQDIR/current ]]; then rm -r $CQDIR/current; fi
+        else
+            kill -USR2 $cqdpid || die 'could not signal cqd'
+            if [[ -f $CQDIR/cqd.pid ]] && [[ -d $CQDIR/current ]]; then
+                echo 'cqd will exit after it finishes its current job.'
+                echo 'To kill it immediately, use `cq stop -f`.'
+            fi
+        fi
+    else
+        echo 'cqd does not appear to be running, removing cqd.pid'
+        rm $CQDIR/cqd.pid
     fi
 }
 
@@ -123,11 +127,10 @@ cq-status() {
     echo "CQDIR is $CQDIR"
     lock
 
-    local pid=$(cqdpid)
-    if [[ -n $pid ]]; then
-        if [[ -d /proc/$pid ]]
-        then echo "cqd is running with pid $pid"
-        else echo "cqd ostensibly has pid $pid, but is not running!"
+    if cqd-running; then
+        if [[ -d /proc/$cqdpid ]]
+        then echo "cqd is running with pid $cqdpid"
+        else echo "cqd ostensibly has pid $cqdpid, but is not running!"
         fi
     else echo "cqd is not running"
     fi
