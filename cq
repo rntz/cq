@@ -3,12 +3,12 @@ integer lockfd
 exedir=$(dirname $(readlink -f $0))
 
 # Utility functions
-die() { echo $@ >&2; exit 1 }
+die() { echo fatal: $@ >&2; exit 1 }
 warn() { echo warning: $@ >&2; return 1 }
 
 init() {
     # Determine the instance directory.
-    [[ -n $CQDIR ]] || die 'No CQDIR specified'
+    [[ -n $CQDIR ]] || die 'no CQDIR specified'
     [[ -d $CQDIR ]] || die 'CQDIR is not a directory'
     [[ -x $CQDIR ]] || die 'CQDIR not searchable'
     [[ -w $CQDIR ]] || die 'CQDIR not writable'
@@ -44,7 +44,7 @@ jobsummary() {
 
 jobdesc() {
     local jobid=$1
-    local jobdir=${2:-$CQDIR/jobs/$jobid}
+    local jobdir=${2-$CQDIR/jobs/$jobid}
     local jobfd
     exec {jobfd}>$jobdir/lock
     flock -s $jobfd
@@ -67,7 +67,7 @@ cq-create() {
     # timestamps). Try to keep it that way.
 
     # Set up a new instance directory.
-    CQDIR=${1:-${CQDIR:-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
+    CQDIR=${1-${CQDIR-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
     mkdir -p $CQDIR || die "cannot make instance directory"
     mkdir -p $CQDIR/jobs || die "cannot make job directory"
     touch $CQDIR/queue || die "cannot make job queue"
@@ -76,8 +76,8 @@ cq-create() {
 }
 
 cq-destroy() {
-    CQDIR=${1:-${CQDIR}}
-    [[ -f $CQDIR/cqd.pid ]] && die 'cqd still running!'
+    CQDIR=${1-${CQDIR}}
+    [[ -f $CQDIR/cqd.pid ]] && die 'cqd still running'
     rm -r $CQDIR
     echo "unset CQDIR"
 }
@@ -94,10 +94,10 @@ cq-start() {
 }
 
 cq-stop() {
-    while getopts 'f' option $@; do
+    while getopts ':f' option $@; do
         case $option in
             f) force=true;;
-            *) die "Unrecognized cq-stop option: ${option}";;
+            *) die "unrecognized cq-stop option: -${OPTARG}";;
         esac
     done
     set -- ${@[$OPTIND,-1]}
@@ -144,7 +144,7 @@ cq-view() {
     # No locking can save the fundamental issue here - the current job can end
     # at any time. So we don't do any locking.
 
-    [[ -f $CQDIR/current/pid ]] || die "No current job to view."
+    [[ -f $CQDIR/current/pid ]] || die "no current job to view"
     local pid=$(cat $CQDIR/current/pid)
     screen -r $pid
 }
@@ -172,7 +172,7 @@ cq-list() {
 
 cq-edit() {
     jobid=$1
-    [[ -n $jobid ]] || die "No jobid supplied."
+    [[ -n $jobid ]] || die "no jobid supplied"
     jobdir=$CQDIR/jobs/$jobid
     flock -x $jobdir/lock $EDITOR $jobdir/run
 }
@@ -184,11 +184,11 @@ cq-edit-queue() {
 
 cq-add() {
     # Parse options.
-    while getopts 'en:' option ${@}; do
+    while getopts ':en:' option ${@}; do
         case $option in
             e) edit=true;;
             n) jobid=$OPTARG;;
-            *) die "Unrecognized cq-add option: ${option}";;
+            *) die "unrecognized cq-add option: -${OPTARG}";;
         esac
     done
     set -- ${@[$OPTIND,-1]}
@@ -237,7 +237,7 @@ cq-remove() {
 
     jobid=$1
     jobdir=$CQDIR/jobs/$jobid
-    [[ -d $jobdir ]] || die "No such job: ${jobid}"
+    [[ -d $jobdir ]] || die "no such job: ${jobid}"
 
     # Remove from queue
     tmp=$(mktemp)
@@ -260,15 +260,15 @@ cq-remove() {
 
 
 # Determine command & global options and run command
-while getopts 'd:' option ${@}; do
+while getopts ':d:' option ${@}; do
     case $option in
         d) CQDIR=$OPTARG;;
-        *) die "Unrecognized option: ${option}";;
+        *) die "unrecognized option: -${OPTARG}";;
     esac
     set -- ${@[$OPTIND,-1]}
 done
 
-(( $# )) || die 'No command supplied!'
+(( $# )) || die 'no command supplied'
 cmd=$1; shift
 
 case $cmd in
