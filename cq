@@ -60,7 +60,10 @@ jobdescs() { while read jobid; do jobdesc $jobid; done }
 cq-nop() {}
 
 cq-create() {
-    # FIXME: test whether directory is already occupied
+    # N.B: This function is idempotent - if run when CQDIR is already an
+    # instance directory, it will do nothing (aside from changing a few
+    # timestamps). Try to keep it that way.
+
     # Set up a new instance directory.
     CQDIR=${1:-${CQDIR:-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
     mkdir -p $CQDIR || die "cannot make instance directory"

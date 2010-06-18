@@ -62,11 +62,11 @@ variable I<CQDIR>.
 
 =item B<cq create> [F<CQDIR>]
 
-Creates a new cq instance in F<CQDIR>, or in a temporary directory if I<CQDIR>
-is not supplied (either via environment variable or via B<-d>). Outputs sh(1)
-commands to set the appropriate environment variables, so that future cq
-invocations will use this cq instance; intended to be used with eval(1), as in
-C<eval $(cq create)>.
+Makes F<DIR> an instance directory. If it already is, does nothing. F<DIR>
+defaults to I<CQDIR>; if neither is specified, a temporary directory is used.
+Outputs sh(1) commands to set the I<CQDIR> environment variable, so that future
+cq invocations will use this cq instance; intended to be used with eval(1), as
+in C<eval $(cq create)>.
 
 
 =item B<cq destroy> [F<CQDIR>]
