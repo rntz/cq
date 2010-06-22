@@ -1,1 +1,2 @@
 create cq instance dirs in /var/run/cq/ by default instead of in /tmp
+refactor out usage of getopts with failure modes

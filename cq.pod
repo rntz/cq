@@ -32,15 +32,14 @@ executed in FIFO order. cqd takes a job off the top of the queue, makes it the
 B<current> job, executes it, destroys it, and repeats. If the queue is empty,
 cqd waits until a new job appears.
 
-cqd executes jobs using screen(1), allowing the user to interact with and view
-their output. (At present, this use of screen is hardcoded; in the future, this
-may be generalized to allow arbitrary wrappers.)
-
 The queue may be edited on-the-fly by the user. While the queue is being edited,
 cqd will not remove jobs from it; it will wait until the user is done editing,
 then remove and run the next job. Similarly, jobs still on the queue may be
 edited by the user. If a job that would be made current is being edited, cqd
 will wait until the user finishes before running it.
+
+cqd can run jobs using a user-specified wrapper program. For example, the author
+likes to run each job in a screen(1) instance.
 
 
 =head1 OPTIONS
@@ -60,13 +59,14 @@ variable I<CQDIR>.
 =over
 
 
-=item B<cq create> [F<CQDIR>]
+=item B<cq create> [B<-c> F<FILE>] [F<DIR>]
 
-Makes F<DIR> an instance directory. If it already is, does nothing. F<DIR>
-defaults to I<CQDIR>; if neither is specified, a temporary directory is used.
-Outputs sh(1) commands to set the I<CQDIR> environment variable, so that future
-cq invocations will use this cq instance; intended to be used with eval(1), as
-in C<eval $(cq create)>.
+Makes F<DIR> an instance directory (if it already is, it remains so). F<DIR>
+defaults to I<CQDIR>; if neither is specified, a temporary directory is used. If
+specified, F<FILE> is used as a configuration file (see L</CONFIGURATION>,
+below). Outputs sh(1) commands to set the I<CQDIR> environment variable, so that
+future cq invocations will use this cq instance; intended to be used with
+eval(1), as in C<eval $(cq create)>.
 
 
 =item B<cq destroy> [F<CQDIR>]
@@ -123,15 +123,65 @@ Lists the jobs in the queue (and those not in the queue if such exist, though
 they really shouldn't, except during atomic queue modifications).
 
 
-=item B<cq> B<v>[B<iew>]
+=item B<cq hup>
 
-Attaches to the screen of the currently-running job.
+Explicitly tell cqd to reload its configuration file. (Unnecessary under normal
+circumstances.)
 
 
 =item B<cq ping>
 
 Explicitly tell cqd to rescan the queue. (Unnecessary under normal circumstances.)
 
+
+=back
+
+
+=head1 CONFIGURATION
+
+cq has a simple rcfile-like configuration mechanism. The B<-c> option to B<cq
+create> specifies a configuration file to use with the created instance; this
+may also be used to add a config file to an already-existing instance. Config
+files are line-oriented: the first word of a line specifies the configuration
+variable to set, and the remainder specifies its value. Unix-style comments
+(from '#' until end-of-line) are supported, and empty lines are ignored.
+Configuration variables and their descriptions follow.
+
+
+=over
+
+=item I<run>
+
+What command to use to run jobs. Parsed shell-style into a list of words, but
+not actually passed to sh(1). If any of the words is precisely '%s' (sans
+quotes), it is replaced with the full path to the job's run-file.
+
+Warning: The precise handling of '%s' and other printf(3)-style escapes, as well
+as how this command is parsed (whether it is passed to sh(1), whether
+tilde-expansion or environment variable references are performed), may change in
+the future.
+
+=back
+
+
+=head1 SIGNALS
+
+cq uses unix signals to communicate with cqd. For reference, cqd understands the
+following signals:
+
+=over
+
+=item B<SIGALRM>
+
+The queue may have changed.
+
+=item B<SIGINT>
+
+Stop running after finishing the current job.
+
+=item B<SIGHUP>
+
+Reload the configuration file.
 
 =back
 

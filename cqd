@@ -2,6 +2,7 @@
 import fcntl
 import os
 import os.path as path
+import shlex
 import signal
 import subprocess as sub
 import sys
@@ -14,8 +15,12 @@ def ensure(condition, msg):
         raise Fucked(msg)
 
 
-def log(string):
-    sys.stderr.write(string + '\n')
+def log(msg):
+    sys.stderr.write(msg + '\n')
+
+
+def warn(msg):
+    log('warning: ' + msg)
 
 
 def cqfile(*args):
@@ -23,9 +28,7 @@ def cqfile(*args):
 
 
 def wakeup():
-    event.acquire()
-    event.notify()
-    event.release()
+    event.set()
 
 
 def halt():
@@ -51,14 +54,15 @@ def run_job(job_dir):
     pid_path = path.join(job_dir, 'pid')
     lock_path = path.join(job_dir, 'lock')
 
+    if 'run' in config:
+        cmd = [x if x != '%s' else run_path for x in config['run']]
+    else:
+        cmd = run_path
+
     with open('/dev/null', 'w') as nullfd:
-        child = sub.Popen(
-            ['screen',
-             '-D', '-m',        # start detached, but don't fork a new process
-             '-S', 'cqd',       # give it a useful session name
-             '--', run_path],   # run the given job
-            stdin=nullfd, stdout=nullfd, stderr=None,
-            close_fds=True)
+        child = sub.Popen(cmd,
+                          stdin=nullfd, stdout=nullfd, stderr=None,
+                          close_fds=True)
 
         # Write the pid to the pidfile
         log('spawned child %d running %s' % (child.pid, run_path))
@@ -104,43 +108,64 @@ def handle_job():
 
 
 def event_loop():
-    # Yes, each of these checks is necessary. Yes, this is ugly. What I really
-    # want is a saturating binary semaphore.
     while not stop_flag:
+        event.wait()
+        event.clear()
         while handle_job() and not stop_flag:
             continue
-        if stop_flag:
-            break
-        event.acquire()
-        event.wait()
-        event.release()
 
     # Exit gracefully
     log("exiting")
     os.remove(cqfile('cqd.pid'))
 
 
+def parse_config(f):
+    conf = {}
+    for line in f:
+        words = shlex.split(line, '#')
+        if not words: continue
+        conf[words[0]] = words[1:]
+    return conf
+
+
+def reconfig():
+    global config
+    cfile = cqfile('config')
+
+    if path.exists(cfile):
+        with open(cfile, 'r') as cf:
+            config = parse_config(cf)
+        log('loaded config file')
+    else:
+        log('no config file to load')
+
+
 def main(argv):
     global cqdir, lock_file, stop_flag, event
-
-    stop_flag = False
 
     try: cqdir = os.environ["CQDIR"]
     except KeyError:
         raise UserError("CQDIR not set")
 
+    # TODO: canonicalize cqdir here.
+
     ensure(path.isdir(cqdir), "CQDIR is not a dir")
     ensure(os.access(cqdir, os.F_OK | os.R_OK | os.W_OK | os.X_OK),
            "CQDIR does not have acceptable permissions")
 
+    # Set up global state
     lock_file = open(cqfile('lock'), 'w')
+    event = threading.Event()
+    stop_flag = False
+    reconfig()
 
-    # Register signal handlers for USR1, USR2
-    signal.signal(signal.SIGUSR1, lambda signo, frame: wakeup())
-    signal.signal(signal.SIGUSR2, lambda signo, frame: halt())
+    # Register signal handlers for USR1, USR2, HUP
+    signal.signal(signal.SIGALRM, lambda signo, frame: wakeup())
+    signal.signal(signal.SIGINT, lambda signo, frame: halt())
+    signal.signal(signal.SIGHUP, lambda signo, frame: reconfig())
 
     # Run the event loop
-    event = threading.Condition()
+    event.set()
     threading.Thread(target=event_loop).start()
 
     # Wait for signals.
