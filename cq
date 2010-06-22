@@ -57,20 +57,21 @@ jobdesc() {
 
 jobdescs() { while read jobid; do jobdesc $jobid; done }
 
-optsget() {
-    getopts ":$1" option ${@[2,-1]} &&
+optest() {
     case $option in
         :) die "argument expected after -${OPTARG} option";;
         '?') die "unrecognized option: -${OPTARG}";;
     esac
 }
 
+
 # Commands
 cq-create() {
     # N.B: This function is idempotent - if run when CQDIR is already an
     # instance directory, it will do nothing (aside from changing a few
     # timestamps). Try to keep it that way.
-    while optsget 'c:' $@; do
+    while getopts ':c:' option; do
+        optest
         case $option in
             c) configfile=$OPTARG;;
         esac
@@ -114,7 +115,8 @@ cq-start() {
 }
 
 cq-stop() {
-    while optsget 'f' $@; do
+    while getopts ':f' option; do
+        optest
         case $option in
             f) force=true;;
         esac
@@ -194,7 +196,8 @@ cq-edit-queue() {
 
 cq-add() {
     # Parse options.
-    while optsget 'en:' ${@}; do
+    while getopts ':en:' option; do
+        optest
         case $option in
             e) edit=true;;
             n) jobid=$OPTARG;;
@@ -269,7 +272,8 @@ cq-remove() {
 
 
 # Determine command & global options and run command
-while optsget 'd:' ${@}; do
+while getopts ':d:' option; do
+    optest
     case $option in
         d) CQDIR=$OPTARG;;
     esac
