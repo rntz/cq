@@ -1,6 +1,6 @@
 include config.mk
 
-.PHONY: all clean install
+.PHONY: all clean install uninstall
 
 BINFILES=cq
 LIBEXECFILES=cq cqd
