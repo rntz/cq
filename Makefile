@@ -1,6 +1,6 @@
 include config.mk
 
-.PHONY: all clean install uninstall
+.PHONY: all clean install uninstall devinstall
 
 BINFILES=cq
 LIBEXECFILES=cq cqd
@@ -17,6 +17,10 @@ install: all
 	install -m 755 $(LIBEXECFILES) $(LIBEXEC)/
 	install -m 644 $(MAN1FILES) $(MAN)/man1/
 	ln -s $(addprefix $(LIBEXEC)/,$(BINFILES)) $(BIN)/
+
+devinstall:
+	install -d $(BIN)/
+	ln -s $(addprefix $(PWD)/,$(BINFILES)) $(BIN)/
 
 uninstall:
 	rm -f $(addprefix $(BIN)/,$(BINFILES))
