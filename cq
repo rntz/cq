@@ -95,8 +95,9 @@ cq-create() {
     mkdir -p $CQDIR/jobs || die "cannot make job directory"
     touch $CQDIR/queue || die "cannot make job queue"
 
+    # Symlink in config file
     if have c; then
-        cp ${opts[c]} $CQDIR/config
+        ln -s $(readlink -e ${opts[c]}) $CQDIR/config
         kill-cqd -HUP
     fi
 
