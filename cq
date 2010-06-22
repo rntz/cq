@@ -59,8 +59,6 @@ jobdesc() {
 jobdescs() { while read jobid; do jobdesc $jobid; done }
 
 # Commands
-cq-nop() {}
-
 cq-create() {
     # N.B: This function is idempotent - if run when CQDIR is already an
     # instance directory, it will do nothing (aside from changing a few
