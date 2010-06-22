@@ -62,12 +62,25 @@ cq-create() {
     # N.B: This function is idempotent - if run when CQDIR is already an
     # instance directory, it will do nothing (aside from changing a few
     # timestamps). Try to keep it that way.
+    while getopts ':c:' option $@; do
+        case $option in
+            c) configfile=$OPTARG;;
+            :) die "argument expected after -${OPTARG} option";;
+            *) die "unrecognized cq-create option: -${OPTARG}";;
+        esac
+    done
+    set -- ${@[$OPTIND,-1]}
 
     # Set up a new instance directory.
     CQDIR=${1-${CQDIR-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
     mkdir -p $CQDIR || die "cannot make instance directory"
     mkdir -p $CQDIR/jobs || die "cannot make job directory"
     touch $CQDIR/queue || die "cannot make job queue"
+
+    if (( $+configfile )); then
+        cp ${configfile} $CQDIR/config
+        kill-cqd -HUP
+    fi
 
     echo "export CQDIR='$CQDIR'"
 }
