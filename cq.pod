@@ -139,14 +139,16 @@ Explicitly tell cqd to rescan the queue. (Unnecessary under normal circumstances
 
 =head1 CONFIGURATION
 
-cq has a simple rcfile-like configuration mechanism. The B<-c> option to B<cq
-create> specifies a configuration file to use with the created instance; this
-may also be used to add a config file to an already-existing instance. Config
-files are line-oriented: the first word of a line specifies the configuration
-variable to set, and the remainder specifies its value. Unix-style comments
-(from '#' until end-of-line) are supported, and empty lines are ignored.
-Configuration variables and their descriptions follow.
+cq has a simple rcfile-like configuration mechanism. An instance's config file
+is found at I<CQDIR>/config; B<cq create -c> merely symlinks this to the
+specified file, and tells cqd (if it is running) to reload its configuration.
 
+Config files are line-oriented: the first word of a line specifies the
+configuration variable to set, and the remainder specifies its value. Unix-style
+comments (from '#' until end-of-line) are supported, and empty lines are
+ignored.
+
+=head2 Configuration variables
 
 =over
 
