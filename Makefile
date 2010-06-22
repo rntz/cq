@@ -20,7 +20,7 @@ install: all
 
 devinstall:
 	install -d $(BIN)/
-	ln -s $(addprefix $(PWD)/,$(BINFILES)) $(BIN)/
+	ln -s $(addprefix $(shell pwd)/,$(BINFILES)) $(BIN)/
 
 uninstall:
 	rm -f $(addprefix $(BIN)/,$(BINFILES))
