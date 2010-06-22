@@ -4,5 +4,3 @@ PREFIX=$(ROOT)/usr/local
 BIN=$(PREFIX)/bin
 LIBEXEC=$(PREFIX)/libexec
 MAN=$(PREFIX)/share/man
-
-PREFIX=$(HOME)/t
