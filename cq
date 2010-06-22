@@ -25,9 +25,8 @@ cqd-running() {
 lock() { flock -x $lockfd }
 unlock() { flock -u $lockfd }
 
-notify-cqd() {
-    cqd-running && kill -USR1 $cqdpid
-}
+kill-cqd() { cqd-running && kill $@ $cqdpid }
+notify-cqd() { kill-cqd -USR1 }
 
 newjobid() {
     comm -13 <(ls $CQDIR/jobs | egrep '^[0-9]+$' | sort -n) \
