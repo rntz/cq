@@ -59,24 +59,35 @@ jobdescs() { while read jobid; do jobdesc $jobid; done }
 
 optest() {
     case $option in
-        :) die "argument expected after -${OPTARG} option";;
+        ':') die "argument expected after -${OPTARG} option";;
         '?') die "unrecognized option: -${OPTARG}";;
     esac
 }
 
+optparse() {
+    unset opts args
+    typeset -ga args
+    typeset -gA opts
+
+    local option
+    local flags=$1; shift
+    while getopts ":$flags" option; do
+        optest
+        opts[$option]=$OPTARG
+    done
+
+    args=( $@[$OPTIND,-1] )
+}
+
+have() { (( $+opts[$1] )) }
 
 # Commands
 cq-create() {
-    # N.B: This function is idempotent - if run when CQDIR is already an
-    # instance directory, it will do nothing (aside from changing a few
-    # timestamps). Try to keep it that way.
-    while getopts ':c:' option; do
-        optest
-        case $option in
-            c) configfile=$OPTARG;;
-        esac
-    done
-    set -- ${@[$OPTIND,-1]}
+    # N.B: This function is nondestructive - if run when CQDIR is already an
+    # instance directory, it will not disturb the queue, cqd, etc. Keep it that
+    # way.
+    optparse 'c:' $@
+    set -- $args
 
     # Set up a new instance directory.
     CQDIR=${1-${CQDIR-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
@@ -84,8 +95,8 @@ cq-create() {
     mkdir -p $CQDIR/jobs || die "cannot make job directory"
     touch $CQDIR/queue || die "cannot make job queue"
 
-    if (( $+configfile )); then
-        cp ${configfile} $CQDIR/config
+    if have c; then
+        cp ${opts[c]} $CQDIR/config
         kill-cqd -HUP
     fi
 
@@ -115,18 +126,13 @@ cq-start() {
 }
 
 cq-stop() {
-    while getopts ':f' option; do
-        optest
-        case $option in
-            f) force=true;;
-        esac
-    done
-    set -- ${@[$OPTIND,-1]}
+    optparse 'f' $@
+    set -- $args
 
     cqd-running || die 'cqd is not running'
 
     if [[ -d /proc/$cqdpid ]]; then
-        if ${force-false}
+        if have f               # force-kill
         then
             kill $cqdpid || die 'could not kill cqd'
             rm -f $CQDIR/cqd.pid
@@ -196,19 +202,13 @@ cq-edit-queue() {
 
 cq-add() {
     # Parse options.
-    while getopts ':en:' option; do
-        optest
-        case $option in
-            e) edit=true;;
-            n) jobid=$OPTARG;;
-        esac
-    done
-    set -- ${@[$OPTIND,-1]}
+    optparse 'en:' $@
+    set -- $args
 
     lock
 
     # Create a directory for our job.
-    [[ -z $jobid ]] && jobid=$(newjobid)
+    jobid=${opts[n]-$(newjobid)}
     jobdir=$CQDIR/jobs/$jobid
     mkdir $jobdir 2>/dev/null || die "job already exists: $jobid"
     # lock handoff to avoid exposing our job directory in an uninitialized state
@@ -226,7 +226,7 @@ EOF
     chmod +x $runfile || die "cannot make job runfile executable"
 
     # Edit the job if the user requested it.
-    if [[ -n $edit ]] && ! $EDITOR $runfile; then
+    if have e && ! $EDITOR $runfile; then
         echo "editor failed, removing job $jobid" >&2
         lock
         rm -r $jobdir || echo "could not remove job $jobid" >&2
@@ -272,13 +272,10 @@ cq-remove() {
 
 
 # Determine command & global options and run command
-while getopts ':d:' option; do
-    optest
-    case $option in
-        d) CQDIR=$OPTARG;;
-    esac
-    set -- ${@[$OPTIND,-1]}
-done
+optparse 'd:' $@
+set -- $args
+
+have d && CQDIR=$opts[d]
 
 (( $# )) || die 'no command supplied'
 cmd=$1; shift
