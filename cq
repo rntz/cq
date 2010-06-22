@@ -121,6 +121,7 @@ cq-hup() {
 
 cq-start() {
     # FIXME: avoid starting cqd more than once
+    cqd-running && die "cqd already running with pid $cqdpid"
     export CQDIR
     $exedir/cqd $@ >$CQDIR/log 2>&1 &
     echo $! > $CQDIR/cqd.pid
