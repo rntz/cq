@@ -11,6 +11,7 @@ Requirements
 - Python >= 2.5
 - zsh (no idea what version)
 - pod2man: used to generate the man page
+- GNU coreutils: sorry, BSD users & company.
 
 cq needs zsh to run. This is a known bug. I intend to fix it, but it is not high
 priority. I will accept patches to this end, if they are correct and reasonably
