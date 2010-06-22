@@ -137,6 +137,7 @@ def reconfig():
             config = parse_config(cf)
         log('loaded config file')
     else:
+        config = {}
         log('no config file to load')
 
 
