@@ -128,7 +128,7 @@ they really shouldn't, except during atomic queue modifications).
 Attaches to the screen of the currently-running job.
 
 
-=item B<cq hup>
+=item B<cq ping>
 
 Explicitly tell cqd to rescan the queue. (Unnecessary under normal circumstances.)
 
