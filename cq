@@ -29,9 +29,9 @@ kill-cqd() { cqd-running && kill $@ $cqdpid }
 notify-cqd() { kill-cqd -ALRM }
 
 newjobid() {
-    comm -13 <(ls $CQDIR/jobs | egrep '^[0-9]+$' | sort -n) \
-             <(for ((i=0; ; ++i)) echo $i) \
-        2>/dev/null | head -1 2>/dev/null
+    for ((i=0; ; ++i)) {
+        [[ -a $CQDIR/jobs/$i ]] || { echo $i; return 0 }
+    }
 }
 
 jobsummary() {
