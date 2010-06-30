@@ -83,7 +83,6 @@ def run_job(job_dir):
 
 def handle_job():
     lock(lock_file)
-    jobfd = None
     try:
         queue_path = cqfile('queue')
         # If the file is empty, do nothing.
