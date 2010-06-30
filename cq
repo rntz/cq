@@ -204,7 +204,7 @@ cq-edit-queue() {
 
 cq-add() {
     # Parse options.
-    optparse 'en:' $@
+    optparse 'en:i:' $@
     set -- $args
 
     lock
@@ -241,7 +241,15 @@ EOF
 
     # Add to queue.
     lock
-    echo $jobid >> $CQDIR/queue
+    if have i; then
+        # TODO: check whether index is beyond end of file
+        # not sure what to do if this is the case:
+        # add to end? warn user?
+        sed -i $CQDIR/queue -e "$(( ${opts[i]} + 1 ))i\
+$jobid"
+    else
+        echo $jobid >> $CQDIR/queue
+    fi
     notify-cqd
     unlock
 }
