@@ -90,7 +90,7 @@ cq-create() {
     set -- $args
 
     # Set up a new instance directory.
-    CQDIR=${1-${CQDIR-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
+    CQDIR=${1-${CQDIR:-$(mktemp -d --tmpdir cq.XXXXXXXXXX)}}
     mkdir -p $CQDIR || die "cannot make instance directory"
     mkdir -p $CQDIR/jobs || die "cannot make job directory"
     touch $CQDIR/queue || die "cannot make job queue"
