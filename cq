@@ -133,6 +133,11 @@ cq-start() {
     echo $! > $CQDIR/cqd.pid
 }
 
+cq-cont() {
+    cqd-running || die 'cqd is not running'
+    kill -USR1 $cqdpid || die 'could not send USR1 to cqd'
+}
+
 cq-stop() {
     optparse 'f' $@
     set -- $args
@@ -307,7 +312,7 @@ have d && CQDIR=$opts[d]
 cmd=$1; shift
 
 case $cmd in
-    add|create|destroy|edit|edit-queue|hup|list|ping|remove|start|status|stop)
+    add|cont|create|destroy|edit|edit-queue|hup|list|ping|remove|start|status|stop)
         # command was fully specified, do nothing
         ;;
 
