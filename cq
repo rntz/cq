@@ -81,6 +81,12 @@ optparse() {
 
 have() { (( $+opts[$1] )) }
 
+# TODO: actual verification of the queue file
+# can only be run with lock held
+# verify that each line is a job
+# verify that there are no duplicates
+verify-queue-file() { true }
+
 # Commands
 cq-create() {
     # N.B: This function is nondestructive - if run when CQDIR is already an
@@ -181,7 +187,7 @@ cq-list() {
         # Current job.
         [[ -d $CQDIR/current ]] && jobdesc '*' $CQDIR/current
         # Jobs in the queue.
-        cat $CQDIR/queue | jobdescs
+        jobdescs < $CQDIR/queue
         # Jobs not in the queue, if any exist.
         [[ -s $tmp ]] && { echo '--'; jobdescs < $tmp }
     } | column -s $'\t' -t
@@ -198,8 +204,18 @@ cq-edit() {
 }
 
 cq-edit-queue() {
-    flock -x $CQDIR/lock $EDITOR $CQDIR/queue
+    local tmp=$(mktemp)
+
+    lock
+
+    jobdescs < $CQDIR/queue | column -s $'\t' -t > $tmp
+    $EDITOR $tmp
+    sed --in-place 's/^\([^ ]\+\).*/\1/' $tmp
+    verify-queue-file $tmp || die "invalid queue file"
+    < $tmp > $CQDIR/queue
     notify-cqd
+
+    unlock
 }
 
 cq-add() {
