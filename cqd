@@ -160,9 +160,14 @@ def main(argv):
     reconfig()
 
     # Register signal handlers for USR1, USR2, HUP
+    def cont(signo, frame):
+        global stop_flag
+        stop_flag = True
+
     signal.signal(signal.SIGALRM, lambda signo, frame: wakeup())
     signal.signal(signal.SIGINT, lambda signo, frame: halt())
     signal.signal(signal.SIGHUP, lambda signo, frame: reconfig())
+    signal.signal(signal.SIGUSR1, cont)
 
     # Run the event loop
     event.set()
