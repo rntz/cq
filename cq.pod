@@ -86,6 +86,12 @@ there is a job running, the daemon will complete it before exiting. To stop
 immediately, terminating the current job, pass the B<-f> flag.
 
 
+=item B<cq cont>
+
+Cancels a previous B<cq stop>, preventing the cq daemon from stopping when the
+current job is finished.
+
+
 =item B<cq> B<a>[B<dd>] [B<-e>] [B<-n> I<JOBID>] [I<COMMAND> [I<ARG>]...]
 
 Adds a new job to the end of the queue. The job is named I<JOBID>, which
